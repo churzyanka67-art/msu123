@@ -51,7 +51,7 @@ def escaped_chunks(text: str, limit: int = 2500) -> list[str]:
 
 def format_pages(schedule: DaySchedule, group: str) -> list[str]:
     header = f"📅 <b>{date_label(schedule.date)}</b>\n🎓 <b>Группа {escape(group[:120])}</b>"
-    blocks = []
+    pair_blocks = []
     for lesson in schedule.lessons:
         text = f"{lesson.subject}"
         if lesson.lesson_type:
@@ -63,7 +63,22 @@ def format_pages(schedule: DaySchedule, group: str) -> list[str]:
         if lesson.groups and lesson.groups != group:
             text += f"\nГруппы: {lesson.groups}"
         for chunk in escaped_chunks(text):
-            blocks.append(f"<b>{escape(lesson.start_time)}–{escape(lesson.end_time)}</b>\n{chunk}")
+            if pair_blocks and pair_blocks[-1][0] == lesson.pair_number:
+                pair_blocks[-1][1].append(chunk)
+            else:
+                pair_blocks.append(
+                    (
+                        lesson.pair_number,
+                        [
+                            f"<b>{lesson.pair_number}. {escape(lesson.start_time)}–{escape(lesson.end_time)}</b>\n{chunk}"
+                        ],
+                    )
+                )
+    blocks = []
+    for _, entries in pair_blocks:
+        heading = entries[0].split("\n", 1)[0]
+        details = [entry.split("\n", 1)[1] for entry in entries]
+        blocks.append(heading + "\n" + "\n\n".join(details))
     if not blocks:
         blocks = ["😴 В этот день занятий нет."]
     pages, current = [], header
