@@ -30,6 +30,8 @@ def parse_schedule(html: str, selected: date) -> DaySchedule:
     result = DaySchedule(selected)
     dates = []
     found = False
+    slot_numbers = {}
+    next_pair_number = 0
     for row in table.find_all("tr"):
         headers = row.select("th.headdate")
         if headers:
@@ -50,6 +52,12 @@ def parse_schedule(html: str, selected: date) -> DaySchedule:
         start, end = row.select_one(".start"), row.select_one(".end")
         if start is None or end is None:
             raise SourceError("Missing lesson time")
+        begin, finish = start.get_text(strip=True), end.get_text(strip=True)
+        slot = (begin, finish)
+        if slot not in slot_numbers:
+            next_pair_number += 1
+            slot_numbers[slot] = next_pair_number
+        pair_number = slot_numbers[slot]
         cards = cell.select('[data-toggle="popover"][data-content]')
         if not cards and cell.get_text(strip=True).replace("\xa0", ""):
             raise SourceError("Unrecognised lesson markup")
@@ -63,10 +71,10 @@ def parse_schedule(html: str, selected: date) -> DaySchedule:
             ]
             if not lines:
                 raise SourceError("Empty lesson card")
-            begin, finish = start.get_text(strip=True), end.get_text(strip=True)
+            lesson_begin, lesson_finish = begin, finish
             custom = re.fullmatch(r"(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})", lines[0])
             if custom:
-                begin, finish = (x.zfill(5) for x in custom.groups())
+                lesson_begin, lesson_finish = (x.zfill(5) for x in custom.groups())
                 lines.pop(0)
             if not lines:
                 raise SourceError("Missing subject")
@@ -82,13 +90,14 @@ def parse_schedule(html: str, selected: date) -> DaySchedule:
             teacher = ", ".join(lines) or None
             result.lessons.append(
                 Lesson(
-                    begin,
-                    finish,
+                    lesson_begin,
+                    lesson_finish,
                     subject,
                     teacher,
                     re.sub(r"^ауд\.\s*", "", room, flags=re.IGNORECASE) if room else None,
                     kind[1] if kind else None,
                     groups,
+                    pair_number,
                 )
             )
     if not found:
