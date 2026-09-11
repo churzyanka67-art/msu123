@@ -17,6 +17,7 @@ class Lesson:
     classroom: str | None = None
     lesson_type: str | None = None
     groups: str | None = None
+    pair_number: int | None = None
 
 
 @dataclass
