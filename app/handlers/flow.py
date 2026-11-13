@@ -8,7 +8,7 @@ from weakref import WeakValueDictionary
 from aiogram import Bot, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, Message, WebAppInfo
 from pydantic import ValidationError
 
 from app.controller import StaleCallback
@@ -27,9 +27,10 @@ def api_error_details(exc):
 
 
 class FlowHandlers:
-    def __init__(self, controller, store: StateStore, *, widgets=False):
+    def __init__(self, controller, store: StateStore, *, widgets=False, mini_app_url=""):
         self.controller, self.store = controller, store
         self.widgets = widgets
+        self.mini_app_url = mini_app_url
         self._locks = WeakValueDictionary()
 
     def _lock(self, key):
@@ -45,6 +46,15 @@ class FlowHandlers:
         key = (message.chat.id, message.from_user.id)
         async with self._lock(key):
             screen = await self.controller.start()
+            if self.mini_app_url and message.chat.type == "private":
+                screen.keyboard.inline_keyboard.insert(
+                    0,
+                    [
+                        InlineKeyboardButton(
+                            text="Открыть расписание ↗", web_app=WebAppInfo(url=self.mini_app_url)
+                        )
+                    ],
+                )
             try:
                 if self.widgets and message.chat.type == "private":
                     sent = await bot(

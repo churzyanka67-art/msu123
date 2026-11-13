@@ -1,0 +1,11 @@
+.env
+.env.*
+.runtime
+.venv
+.git
+**/__pycache__
+**/*.pyc
+.ruff_cache
+.pytest_cache
+.DS_Store
+preview

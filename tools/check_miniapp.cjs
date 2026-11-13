@@ -1,0 +1,53 @@
+const {chromium}=require('playwright');
+const crypto=require('node:crypto');
+const fs=require('node:fs');
+const fields={auth_date:String(Math.floor(Date.now()/1000)),user:JSON.stringify({id:7,first_name:'Дени'})};
+const check=Object.keys(fields).sort().map(k=>k+'='+fields[k]).join('\n');
+const secret=crypto.createHmac('sha256','WebAppData').update('123456:MINIAPP_BROWSER_TEST').digest();
+fields.hash=crypto.createHmac('sha256',secret).update(check).digest('hex');
+const initData=new URLSearchParams(fields).toString();
+(async()=>{
+  fs.mkdirSync('preview',{recursive:true});
+  const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
+  const errors=[];
+  for(const width of [320,390,1100]){
+    const context=await browser.newContext({viewport:{width,height:850},reducedMotion:'reduce'});
+    const page=await context.newPage();
+    page.on('pageerror',e=>errors.push(e.message));
+    await page.route('https://telegram.org/js/telegram-web-app.js',r=>r.fulfill({body:'',contentType:'text/javascript'}));
+    await page.addInitScript(({initData})=>{
+      const events={};window.fullscreenRequests=0;
+      const app={initData,isFullscreen:false,safeAreaInset:{top:12,bottom:10},contentSafeAreaInset:{top:32},ready(){},expand(){},setHeaderColor(){},setBackgroundColor(){},setBottomBarColor(){},isVersionAtLeast(){return true},HapticFeedback:{selectionChanged(){}},onEvent(name,fn){events[name]=fn},requestFullscreen(){this.isFullscreen=true;window.fullscreenRequests++;events.fullscreenChanged?.()}};
+      window.Telegram={WebApp:app};
+    },{initData});
+    await page.goto('http://127.0.0.1:8081');
+    await page.locator('#faculty option[value="5"]').waitFor({state:'attached'});
+    await page.selectOption('#faculty','5');
+    await page.locator('#course option[value="1"]').waitFor({state:'attached'});
+    await page.selectOption('#course','1');
+    await page.getByRole('button',{name:'101гму',exact:true}).click();
+    await page.getByRole('button',{name:'Показать расписание'}).click();
+    await page.locator('#date-label').filter({hasText:'9 сентября'}).waitFor();
+    await page.locator('#status').waitFor({state:'hidden'});
+    if(await page.locator('.lesson').count()!==4)throw new Error('Missing source lessons');
+    if(await page.evaluate(()=>window.fullscreenRequests)!==1)throw new Error('Fullscreen was not requested');
+    const dimensions=await page.evaluate(()=>({width:document.documentElement.scrollWidth,safeTop:getComputedStyle(document.documentElement).getPropertyValue('--safe-top')}));
+    if(dimensions.width>width)throw new Error('Horizontal overflow at '+width);
+    if(dimensions.safeTop!=='44px')throw new Error('Safe insets were not applied');
+    console.log('layout/fullscreen/safe-area',width,dimensions);
+    await page.evaluate(()=>scrollTo(0,0));
+    await page.screenshot({path:'preview/miniapp-'+width+'.png',fullPage:true});
+    await page.click('#next');
+    await page.locator('#date-label').filter({hasText:'10 сентября'}).waitFor();
+    await page.locator('#status').waitFor({state:'hidden'});
+    if(!await page.locator('#lessons').textContent().then(x=>x.includes('занятий нет')))throw new Error('Empty day missing');
+    await page.click('#today');
+    await page.locator('#date-label').filter({hasText:'9 сентября'}).waitFor();
+    await page.locator('#status').waitFor({state:'hidden'});
+    await page.reload();
+    await page.locator('#date-label').filter({hasText:'9 сентября'}).waitFor();
+    console.log('navigation/restored-group',width,'ok');
+    await context.close();
+  }
+  await browser.close();if(errors.length)throw new Error(errors.join('\n'));
+})().catch(e=>{console.error(e);process.exit(1)});

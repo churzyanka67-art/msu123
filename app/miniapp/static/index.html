@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#eeeef2">
+  <title>Расписание ФГУ</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="#" aria-label="Расписание ФГУ"><span class="brand-mark">фгу<span>↗</span></span><span>ТВОЁ<br>РАСПИСАНИЕ</span></a>
+    <button id="fullscreen" class="icon-button" aria-label="Открыть на весь экран" title="На весь экран">⛶</button>
+  </header>
+  <main>
+    <section class="intro"><p class="eyebrow">МЕНЬШЕ СУЕТЫ. БОЛЬШЕ ЯСНОСТИ.</p><h1>Твой день.<br><span>Ничего лишнего.</span></h1><p>Пары, аудитории и твоя группа — с одного взгляда.</p></section>
+    <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+    <button id="retry" class="retry" hidden>Попробовать ещё раз ↻</button>
+    <div class="layout">
+      <div class="left-column">
+        <section id="nearest-section"><p class="section-label">01 / БЛИЖАЙШАЯ ПАРА</p><article id="nearest" class="card near"><p class="lime">Всё начинается с твоей группы</p><h2>Здесь будет<br>твоя ближайшая пара.</h2><p class="muted">Выбери направление, курс и группу ниже.</p><div class="near-footer"><span>Без поисков в чатах</span><span class="pill">↗</span></div></article></section>
+        <section id="selection-section"><p class="section-label">02 / МОЯ ГРУППА</p><article class="card selection"><p class="muted">Твоё расписание</p><h2>Моя группа</h2><p class="muted">Один раз выбери. Мы запомним.</p><div class="selects"><label>Направление<select id="faculty" aria-label="Направление" disabled><option>Загружаю…</option></select></label><label>Курс<select id="course" aria-label="Курс" disabled><option value="">Выбери</option></select></label></div><label class="group-label" for="group-search">Найти группу</label><input id="group-search" type="search" placeholder="Например, 204гму" autocomplete="off" disabled><div id="groups" class="groups" role="group" aria-label="Группы"><p class="muted">Сначала выбери направление и курс.</p></div><button id="show" class="wide primary" disabled>Показать расписание <span>↗</span></button></article></section>
+      </div>
+      <section id="day-section"><p class="section-label">03 / РАСПИСАНИЕ НА ДЕНЬ</p><article class="card day"><div class="day-head"><span id="weekday" class="lime">Всё по порядку</span><button id="change-group" class="pill" aria-label="Сменить группу">Моя группа ↗</button></div><h2 class="date"><span id="date-label">Твой учебный день</span> <small id="year"></small></h2><div class="day-meta"><span id="pair-count">Пары появятся здесь</span><span id="day-range" class="muted"></span></div><div id="track" class="track" aria-hidden="true"></div><div id="lessons" class="lessons"><div class="empty"><span class="empty-symbol">↗</span><h3>Каждой паре — своё место.</h3><p class="muted">Выбери группу и открой расписание.<br>Остальное мы уже разложили по полочкам.</p></div></div><div id="day-nav" class="day-nav" hidden><button id="previous" aria-label="Предыдущий день">←</button><button id="today">Сегодня</button><button id="next" aria-label="Следующий день">Завтра →</button></div><div class="source"><span>Данные с сайта ФГУ МГУ</span><button id="refresh" class="text-button" disabled>Обновить ↻</button></div></article></section>
+    </div>
+    <footer class="page-footer"><strong>РАСПИСАНИЕ ФГУ</strong><span>Учёба по плану. Жизнь — как захочешь.</span></footer>
+  </main>
+  <nav class="bottom-nav" aria-label="Разделы"><button id="nav-day" class="active">▤ <span>Расписание</span></button><button id="nav-group">▦ <span>Моя группа</span></button></nav>
+</body>
+</html>
