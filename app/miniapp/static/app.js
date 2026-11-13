@@ -107,7 +107,7 @@ function renderGroups(){
 }
 function remember(){try{localStorage.setItem(storageKey,JSON.stringify(appliedSelection));}catch{}}
 function shift(day,delta){const d=new Date(day+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+delta);return d.toISOString().slice(0,10);}
-async function loadDay(day,refresh=false,choice=appliedSelection||selected,stillCurrent=()=>true){const query={...choice};if(day)query.date=day;if(refresh)query.refresh='1';const data=await api('schedule',query);if(!stillCurrent())return false;current=data;appliedSelection={...choice};remember();renderSchedule(data);renderNearest();$('group-day-card').hidden=false;$('profile-group-name').textContent=data.group.name;return true;}
+async function loadDay(day,refresh=false,choice=appliedSelection||selected,stillCurrent=()=>true){const query={...choice};if(day)query.date=day;if(refresh)query.refresh='1';const data=await api('schedule',query);if(!stillCurrent())return false;current=data;appliedSelection={...choice};remember();renderSchedule(data);renderNearest();$('group-day-card').hidden=false;return true;}
 function renderNearest(){
   const data=current,now=new Date(data.now),clock=now.toLocaleTimeString('en-GB',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
   const nearest=data.lessons.find(lesson=>data.date>data.today||(data.date===data.today&&lesson.end_time>clock));
@@ -139,6 +139,7 @@ function setCdoProfile(profile){
   cdoProfile=profile;const connected=Boolean(profile?.connected);
   $('cdo-login-card').hidden=connected;$('personal-day-card').hidden=!connected||!personal;
   $('profile-cdo').textContent=connected?profile.name:'Не подключён';$('connection-dot').classList.toggle('connected',connected);
+  $('profile-group-name').textContent=connected?(profile.group?.trim()||'Группа не указана в ЦДО'):'Войди через ЦДО';
   $('profile-connect').hidden=connected;$('cdo-logout').hidden=!connected;
   if(!connected){personal=null;$('personal-lessons').replaceChildren();$('personal-date-label').textContent='';}
 }
@@ -173,7 +174,7 @@ async function checkCdo(){const generation=authGeneration,profile=await api('cdo
 async function loadPersonal(day){const generation=authGeneration,query={};if(day)query.date=day;const data=await api('cdo/schedule',query);if(generation!==authGeneration)return;personal=data;renderSchedule(personal,'personal-');$('personal-day-card').hidden=false;}
 async function ensurePersonal(){await checkCdo();if(cdoProfile.connected&&!personal)await loadPersonal();}
 
-$('choose-group').onclick=()=>openView('selection');$('change-group').onclick=()=>openView('selection');$('profile-group').onclick=()=>openView('selection');$('selection-back').onclick=()=>openView('day');
+$('choose-group').onclick=()=>openView('selection');$('change-group').onclick=()=>openView('selection');$('selection-back').onclick=()=>openView('day');
 $('faculty').onchange=()=>task(async()=>{selected={faculty:$('faculty').value,course:'',group:''};fillSelect('course',[],'Выбери');groupOptions=[];$('groups').replaceChildren();$('group-search').value='';if(selected.faculty)fillSelect('course',(await api('options',{faculty:selected.faculty})).options,'Выбери курс');});
 $('course').onchange=()=>task(async()=>{selected.course=$('course').value;selected.group='';groupOptions=[];$('group-search').value='';if(selected.course)groupOptions=(await api('options',{faculty:selected.faculty,course:selected.course})).options;renderGroups();});
 $('group-search').oninput=renderGroups;
