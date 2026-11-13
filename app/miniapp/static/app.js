@@ -107,11 +107,11 @@ function renderGroups(){
 }
 function remember(){try{localStorage.setItem(storageKey,JSON.stringify(appliedSelection));}catch{}}
 function shift(day,delta){const d=new Date(day+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+delta);return d.toISOString().slice(0,10);}
-async function loadDay(day,refresh=false,choice=appliedSelection||selected,stillCurrent=()=>true){const query={...choice};if(day)query.date=day;if(refresh)query.refresh='1';const data=await api('schedule',query);if(!stillCurrent())return false;current=data;appliedSelection={...choice};remember();renderSchedule(data);renderNearest();$('group-day-card').hidden=false;return true;}
+async function loadDay(day,refresh=false,choice=appliedSelection||selected,stillCurrent=()=>true){const query={...choice};if(day)query.date=day;if(refresh)query.refresh='1';const data=await api('schedule',query);if(!stillCurrent())return false;current=data;appliedSelection={...choice};remember();renderSchedule(data);$('group-intro').hidden=true;$('group-day-card').hidden=false;return true;}
 function renderNearest(){
-  const data=current,now=new Date(data.now),clock=now.toLocaleTimeString('en-GB',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
+  const data=personal,now=new Date(data.now),clock=now.toLocaleTimeString('en-GB',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
   const nearest=data.lessons.find(lesson=>data.date>data.today||(data.date===data.today&&lesson.end_time>clock));
-  const card=$('nearest');card.replaceChildren();const top=add(card,'div',null,'near-top');
+  const card=$('nearest');card.hidden=false;card.replaceChildren();const top=add(card,'div',null,'near-top');
   add(top,'span',nearest&&data.date===data.today&&nearest.start_time<=clock?'Сейчас на паре':'Ближайшая пара','lime');add(top,'span',data.group.name,'pill');
   if(nearest){const time=add(card,'div',nearest.start_time,'near-clock');add(time,'small',' — '+nearest.end_time);add(card,'h2',nearest.subject,'near-subject');if(nearest.teacher)add(card,'p',nearest.teacher,'muted');}
   else{add(card,'h2',data.lessons.length?'На этот день всё.':'День без пар.');add(card,'p','Можно выдохнуть. Следующий день — по стрелке ниже.','muted');}
@@ -138,10 +138,11 @@ function renderSchedule(data,prefix=''){
 function setCdoProfile(profile){
   cdoProfile=profile;const connected=Boolean(profile?.connected);
   $('cdo-login-card').hidden=connected;$('personal-day-card').hidden=!connected||!personal;
+  $('nearest').hidden=!connected||!personal;
   $('profile-cdo').textContent=connected?profile.name:'Не подключён';$('connection-dot').classList.toggle('connected',connected);
   $('profile-group-name').textContent=connected?(profile.group?.trim()||'Группа не указана в ЦДО'):'Войди через ЦДО';
   $('profile-connect').hidden=connected;$('cdo-logout').hidden=!connected;
-  if(!connected){personal=null;$('personal-lessons').replaceChildren();$('personal-date-label').textContent='';}
+  if(!connected){personal=null;$('personal-lessons').replaceChildren();$('personal-date-label').textContent='';$('nearest').replaceChildren();}
 }
 async function applyCdoGroup(profile){
   const choice=profile?.group_selection;
@@ -171,7 +172,7 @@ async function applyCdoGroup(profile){
   try{await promise;}finally{if(cdoGroupSync?.promise===promise)cdoGroupSync=null;}
 }
 async function checkCdo(){const generation=authGeneration,profile=await api('cdo/session');if(generation===authGeneration){setCdoProfile(profile);await applyCdoGroup(profile);}}
-async function loadPersonal(day){const generation=authGeneration,query={};if(day)query.date=day;const data=await api('cdo/schedule',query);if(generation!==authGeneration)return;personal=data;renderSchedule(personal,'personal-');$('personal-day-card').hidden=false;}
+async function loadPersonal(day){const generation=authGeneration,query={};if(day)query.date=day;const data=await api('cdo/schedule',query);if(generation!==authGeneration)return;personal=data;renderSchedule(personal,'personal-');renderNearest();$('personal-day-card').hidden=false;}
 async function ensurePersonal(){await checkCdo();if(cdoProfile.connected&&!personal)await loadPersonal();}
 
 $('choose-group').onclick=()=>openView('selection');$('change-group').onclick=()=>openView('selection');$('selection-back').onclick=()=>openView('day');

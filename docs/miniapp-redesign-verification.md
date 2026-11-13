@@ -34,3 +34,9 @@ Hosting observation before publishing this follow-up: `/healthz` returned 200 `o
 Reproduced a browser regression: signing in as a student from 102гму, then manually selecting 103гму in the public timetable, overwrote the group shown in Profile. Removed the profile write from public timetable loading; the read-only profile group now updates only from the CDO session response, with an explicit sign-in state after logout. Clicking it no longer opens manual selection.
 
 Browser regression coverage now includes manual group changes while signed in, an unchanged CDO profile group, unchanged personal group/date/subject, and clearing the profile after logout. Personal rendering continues to consume only `/api/cdo/schedule`. CSS uses `touch-action: manipulation` on the root and controls to suppress double-tap zoom while retaining scrolling/pinch zoom (W3C Pointer Events, section 8.3). Physical iPhone gesture behavior has not been independently exercised.
+
+## Nearest lesson moved to Personal
+
+Moved the nearest-lesson card from the public group timetable to the Personal screen, above the day card. Its renderer consumes the personal CDO response rather than the currently browsed public group. The initial group picker remains a separate welcome card, hidden after a successful timetable load. Nearest personal data is hidden before personal loading and cleared after logout.
+
+Browser regression first failed because the card was still inside the public timetable. Extended checks verify the personal subject appears in the moved card, an unavailable CDO timetable does not reveal public-group data there, manual group changes leave the personal nearest lesson unchanged, and logout hides/clears it.
