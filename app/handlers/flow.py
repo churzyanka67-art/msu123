@@ -2,11 +2,12 @@ import asyncio
 import json
 import logging
 import re
+from html import escape
 from weakref import WeakValueDictionary
 
 from aiogram import Bot, Router
 from aiogram.exceptions import TelegramAPIError
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, Message
 from pydantic import ValidationError
 
@@ -58,9 +59,51 @@ class FlowHandlers:
                     sent = await bot.send_message(message.chat.id, screen.text, reply_markup=screen.keyboard)
             except TelegramAPIError as exc:
                 log.warning("Telegram start failed: %s", api_error_details(exc))
+                if self.widgets and "INPUT_MEDIA_WIDGET_NOT_ALLOWED" in exc.message:
+                    try:
+                        await bot.send_message(
+                            message.chat.id,
+                            "Telegram отклонил виджет: INPUT_MEDIA_WIDGET_NOT_ALLOWED.\n"
+                            "Для проверки минимального виджета отправь /widget_test.",
+                        )
+                    except TelegramAPIError as notice_error:
+                        log.warning("Widget error notice failed: %s", api_error_details(notice_error))
                 return
             screen.message_id = sent.message_id
             await self.store.set(key, screen)
+
+    async def widget_test(self, message: Message, bot: Bot):
+        """A minimal, static private-chat probe, independent of the schedule UI."""
+        if message.from_user is None:
+            return
+        if message.chat.type != "private" or message.chat.id != message.from_user.id:
+            await bot.send_message(message.chat.id, "Проверку виджетов нужно запускать в личке с ботом.")
+            return
+        try:
+            await bot(
+                SendWidget(
+                    chat_id=message.chat.id,
+                    html="<p>Проверка виджета ФГУ</p>",
+                    allow_queries=False,
+                    caption="Минимальный тест: без CSS, JavaScript, состояния и запросов",
+                )
+            )
+        except TelegramAPIError as exc:
+            details = api_error_details(exc)
+            log.warning("Minimal widget probe failed: chat_type=private; %s", details)
+            await bot.send_message(
+                message.chat.id,
+                "Минимальный виджет тоже отклонён. Ответ Telegram:\n"
+                f"<code>{escape(details)}</code>\n"
+                "Передай этот ответ для диагностики. Активное расписание сохранено.",
+            )
+            return
+        log.info("Minimal widget probe succeeded: chat_type=private")
+        await bot.send_message(
+            message.chat.id,
+            "Минимальный виджет отправлен. Значит, базовая отправка в эту личку разрешена; "
+            "дальше проверим данные и интерактивность основной карточки.",
+        )
 
     async def widget_update(self, handler, event, data):
         """Intercept the new update before aiogram's older event-type resolver."""
@@ -156,5 +199,6 @@ def create_router(controller, store, *, handlers=None):
     handlers = handlers or FlowHandlers(controller, store)
     router = Router(name="schedule")
     router.message.register(handlers.start, CommandStart())
+    router.message.register(handlers.widget_test, Command("widget_test"))
     router.callback_query.register(handlers.callback)
     return router

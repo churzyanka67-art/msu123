@@ -10,8 +10,8 @@ class SendWidget(TelegramMethod[Message]):
     __returning__ = Message
     chat_id: int
     html: str
-    chat_data: str
-    public_data: str
+    chat_data: str | None = None
+    public_data: str | None = None
     allow_queries: bool = True
     caption: str = "Расписание ФГУ"
 

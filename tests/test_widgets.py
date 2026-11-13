@@ -170,6 +170,35 @@ class WidgetTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("PRIVATE_HTML", result)
         self.assertNotIn("PRIVATE_STATE", result)
 
+    async def test_minimal_probe_has_no_ui_state_or_queries_and_preserves_active_screen(self):
+        controller = self.setup_controller()
+        store = MemoryStore()
+        active = await controller.start()
+        await store.set((7, 7), active)
+        flow = FlowHandlers(controller, store, widgets=True)
+        message = Message(
+            message_id=1,
+            date=NOW,
+            chat=Chat(id=7, type="private"),
+            from_user=User(id=7, is_bot=False, first_name="А"),
+        )
+        bot = AsyncMock()
+        await flow.widget_test(message, bot)
+        method = bot.call_args.args[0]
+        self.assertIsInstance(method, SendWidget)
+        self.assertFalse(method.allow_queries)
+        self.assertIsNone(method.chat_data)
+        self.assertIsNone(method.public_data)
+        self.assertNotIn("<script", method.html)
+        self.assertNotIn("<style", method.html)
+        self.assertIs(await store.get((7, 7)), active)
+        bot.side_effect = TelegramBadRequest(
+            method=method, message="Bad Request: INPUT_MEDIA_WIDGET_NOT_ALLOWED"
+        )
+        await flow.widget_test(message, bot)
+        self.assertIn("INPUT_MEDIA_WIDGET_NOT_ALLOWED", bot.send_message.call_args.args[1])
+        self.assertIs(await store.get((7, 7)), active)
+
 
 if __name__ == "__main__":
     unittest.main()
