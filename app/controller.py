@@ -4,8 +4,9 @@ import logging
 import secrets
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, time
 from html import escape
+from zoneinfo import ZoneInfo
 
 from aiogram.types import InlineKeyboardMarkup
 
@@ -38,6 +39,7 @@ class Screen:
     actions: dict
     selection: Selection
     message_id: int | None = None
+    widget_data: dict | None = None
 
 
 def make_screen(text, rows, selection):
@@ -46,9 +48,11 @@ def make_screen(text, rows, selection):
 
 
 class Controller:
-    def __init__(self, service, *, today=today_moscow):
+    def __init__(self, service, *, today=today_moscow, now=None, widgets=False):
         self.service = service
         self.today = today
+        self.now = now or (lambda: datetime.now(ZoneInfo("Europe/Moscow")))
+        self.widgets = widgets
 
     async def start(self):
         return await self._transition(Selection(), ("reset", None))
@@ -82,25 +86,50 @@ class Controller:
                 state.page = value
             else:
                 raise StaleCallback()
-            return await self._render(state, refresh=refresh)
+            return await self._render(state, refresh=refresh, auto_next_day=name == "group")
         except SourceError as exc:
             log.warning("MSU source failure: %s", exc)
-            return make_screen(
+            screen = make_screen(
                 "⚠️ Не удалось получить расписание с сайта МГУ.\n"
                 "Попробуйте ещё раз чуть позже. Если группа исчезла с сайта, выберите её заново.",
                 [[("🔄 Повторить", ("retry", (name, value)))], [("🔄 Сменить группу", ("reset", None))]],
                 original,
             )
+            if self.widgets:
+                screen.widget_data = {
+                    "v": "error",
+                    "title": "Источник недоступен",
+                    "note": "Не удалось загрузить расписание. Попробуйте ещё раз.",
+                }
+            return screen
 
-    async def _render(self, s, *, refresh=False):
+    async def _render(self, s, *, refresh=False, auto_next_day=False):
         rows = []
+        widget_data = None
         if s.view == "schedule":
             schedule = await self.service.get_schedule(
                 s.group.id, s.day, s.faculty.id, s.course.id, refresh=refresh
             )
-            pages = format_pages(schedule, s.group.name)
+            if auto_next_day and schedule.lessons:
+                now = self.now().astimezone(ZoneInfo("Europe/Moscow"))
+                last_end = max(time.fromisoformat(lesson.end_time) for lesson in schedule.lessons)
+                if s.day == now.date() and now.time() >= last_end:
+                    s.day = shift_date(s.day, 1)
+                    schedule = await self.service.get_schedule(
+                        s.group.id, s.day, s.faculty.id, s.course.id, refresh=refresh
+                    )
+            if self.widgets:
+                from app.widgets.presentation import schedule_pages
+
+                pages = schedule_pages(schedule, s.group.name, self.now())
+            else:
+                pages = format_pages(schedule, s.group.name)
             s.page = min(max(s.page, 0), len(pages) - 1)
-            text = pages[s.page]
+            if self.widgets:
+                widget_data = pages[s.page]
+                text = f"Расписание · {s.group.name} · {s.day:%d.%m.%Y}"
+            else:
+                text = pages[s.page]
             if len(pages) > 1:
                 text += f"\n\nСтраница {s.page + 1}/{len(pages)}"
                 pager = []
@@ -121,7 +150,11 @@ class Controller:
                     else ("Завтра" if step == 1 and s.day == self.today() else DAYS[target.weekday()])
                 )
                 nav.append((f"← {label}" if step < 0 else f"{label} →", ("date", target)))
-            rows += [nav, [("🔄 Сменить группу", ("reset", None))]]
+            if self.widgets:
+                nav.insert(1, ("Сменить группу", ("reset", None)))
+                rows.append(nav)
+            else:
+                rows += [nav, [("🔄 Сменить группу", ("reset", None))]]
         else:
             if s.view == "faculties":
                 options = await self.service.get_faculties(refresh=refresh)
@@ -137,13 +170,13 @@ class Controller:
                 action = "group"
             if not options:
                 raise SourceError("Empty catalog or expired selection")
-            count = 20
+            count = 6 if self.widgets else 20
             s.page = min(max(s.page, 0), (len(options) - 1) // count)
             buttons = [
                 ((o.name + " курс") if action == "course" else o.name, (action, o))
                 for o in options[s.page * count : (s.page + 1) * count]
             ]
-            width = 1 if action == "faculty" else 2
+            width = 1 if action == "faculty" else (3 if self.widgets and action == "group" else 2)
             rows = [buttons[i : i + width] for i in range(0, len(buttons), width)]
             pager = []
             if s.page:
@@ -154,4 +187,14 @@ class Controller:
                 rows.append(pager)
             if s.view != "faculties":
                 rows.append([("← Назад", ("back", "faculties" if s.view == "courses" else "courses"))])
-        return make_screen(text, rows, s)
+            if self.widgets:
+                titles = {"faculties": "Моя группа", "courses": "Выбери курс", "groups": "Выбери группу"}
+                note = "Выбери направление, чтобы видеть свои пары."
+                if s.faculty:
+                    note = s.faculty.name
+                if s.course:
+                    note += f" · {s.course.name} курс"
+                widget_data = {"v": "select", "title": titles[s.view], "note": note}
+        screen = make_screen(text, rows, s)
+        screen.widget_data = widget_data
+        return screen

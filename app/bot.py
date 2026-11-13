@@ -10,7 +10,7 @@ from aiogram.utils.token import TokenValidationError
 
 from app.config import Config
 from app.controller import Controller
-from app.handlers.flow import create_router
+from app.handlers.flow import FlowHandlers, create_router
 from app.services.msu_schedule import MsuScheduleService
 from app.storage import MemoryStore
 
@@ -21,8 +21,15 @@ async def run(config: Config):
         async with httpx.AsyncClient(timeout=httpx.Timeout(20, connect=10), follow_redirects=True) as client:
             service = MsuScheduleService(client, cache_enabled=config.cache_enabled)
             dispatcher = Dispatcher()
-            dispatcher.include_router(create_router(Controller(service), MemoryStore()))
-            await dispatcher.start_polling(bot, close_bot_session=False)
+            controller = Controller(service, widgets=config.widgets_enabled)
+            store = MemoryStore()
+            handlers = FlowHandlers(controller, store, widgets=config.widgets_enabled)
+            dispatcher.include_router(create_router(controller, store, handlers=handlers))
+            dispatcher.update.outer_middleware(handlers.widget_update)
+            updates = ["message", "callback_query"]
+            if config.widgets_enabled:
+                updates.append("widget_query")
+            await dispatcher.start_polling(bot, close_bot_session=False, allowed_updates=updates)
     finally:
         await bot.session.close()
 

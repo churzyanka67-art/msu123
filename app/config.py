@@ -11,14 +11,20 @@ ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 class Config:
     bot_token: str
     cache_enabled: bool = True
+    widgets_enabled: bool = True
 
     @classmethod
     def load(cls):
         values = dotenv_values(ENV_PATH)
+        # Hosting platforms inject secrets as process environment variables;
+        # local development can still use the .env file.
         token = (os.getenv("BOT_TOKEN") or values.get("BOT_TOKEN") or "").strip()
         if not token or token == "...":
-            raise ValueError(
-                "Добавьте BOT_TOKEN в переменные окружения Bothost или файл .env."
-            )
+            raise ValueError("Добавьте BOT_TOKEN в .env (см. .env.example и README.md).")
         cache_value = os.getenv("CACHE_ENABLED") or values.get("CACHE_ENABLED") or "true"
-        return cls(token, cache_value.lower() not in {"false", "0", "no"})
+        widget_value = os.getenv("WIDGETS_ENABLED") or values.get("WIDGETS_ENABLED") or "true"
+        return cls(
+            token,
+            cache_value.lower() not in {"false", "0", "no"},
+            widget_value.lower() not in {"false", "0", "no"},
+        )

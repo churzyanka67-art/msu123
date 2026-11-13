@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+
+<html lang="ru">
+<head>
+
+
+
+<link href="/icon.png" rel="shortcut icon" type="image/png"/>
+<link href="/icon.png" rel="icon" type="image/png"/>
+
+
+<title>Расписание: Академ. группы </title>
+<link href="/assets/961cd581/css/select2.min.css?v=1580187682" rel="stylesheet"/>
+<link href="/assets/5936c3cf/select2-bootstrap4.min.css?v=1611817346" rel="stylesheet"/>
+<link href="/assets/3adf7e17/daterangepicker.css?v=1590305601" rel="stylesheet"/>
+<link href="/assets/5a3349af/css/bootstrap4-toggle.min.css?v=1694723901" rel="stylesheet"/>
+<link href="/assets/221df4a6/lesson-type.css?v=1694719096" rel="stylesheet"/>
+<link href="/assets/b04f43b5/style.css?v=1694719096" rel="stylesheet"/>
+<link href="/assets/b607f235/noty.css?v=1513197394" rel="stylesheet"/>
+<link href="/assets/aa918459/css/all.min.css?v=1721150011" rel="stylesheet"/>
+<link href="/assets/6561654d/sbadmin2-extra.css?v=1694719096" rel="stylesheet"/>
+<link href="/assets/ddb127a0/sb-admin-2.min.css?v=1694719096" rel="stylesheet"/>
+<link href="/assets/f845609/portal.css?v=1699391664" rel="stylesheet"/>
+<link href="/assets/a3d67cbb/app.css?v=1728904326" rel="stylesheet"/>
+<link href="/assets/221df4a6/spinner.css?v=1694719096" rel="stylesheet"/></head>
+<body id="page-top">
+<div id="wrapper">
+<ul class="navbar-nav bg-gradient-primary sidebar sidebar-dark accordion" id="accordionSidebar"><a class="sidebar-brand d-flex align-items-center justify-content-center" href="/"><div class="sidebar-brand-icon"><img alt="" height="48px" src="/icon.png"/></div></a><hr class="sidebar-divider my-0"/><li class="nav-item"><a class="nav-link" href="/"><i class="fas fa-fw fa-home"></i><span>Главная</span></a></li><hr class="sidebar-divider"/><div class="sidebar-heading">Сервисы</div><li class="nav-item active"><a aria-controls="w7-collapse1" aria-expanded="false" class="nav-link" data-target="#w7-collapse1" data-toggle="collapse" href="#"><i class="fas fa-fw fa-calendar"></i><span>Расписание</span></a><div aria-labelledby="headingPages" class="menu collapse show" data-parent="#accordionSidebar" id="w7-collapse1">
+<div class="bg-white py-2 collapse-inner rounded">
+<a class="collapse-item" href="/time-table/student">Студента</a>
+<a class="collapse-item active" href="/time-table/group">Академ. группы</a>
+<a class="collapse-item" href="/time-table/teacher">Преподавателя</a>
+</div>
+</div></li><hr class="sidebar-divider"/><p style="text-align:center;"><span style="color:rgb(236,240,241);font-size:12pt;">973</span><br/><span style="color:rgb(236,240,241);"><span style="font-size:7pt;">код для мобильного приложения</span></span></p><hr class="sidebar-divider"/><div class="sidebar-heading text-center mb-2">9 сентября 2026 г. в 22:04:15 GMT+3</div><hr class="sidebar-divider"/><div class="text-center d-none d-md-inline">
+<button class="rounded-circle border-0" id="sidebarToggle"></button>
+</div></ul>
+<div class="d-flex flex-column" id="content-wrapper">
+<div id="content">
+<nav class="navbar navbar-expand bg-white topbar mb-3 static-top shadow" role="navigation">
+<button class="btn btn-link d-md-none rounded-circle mr-3" id="sidebarToggleTop">
+<i class="fa fa-bars"></i>
+</button>
+<div class="header text-center ml-md-auto h2 d-none d-md-block">
+        Факультет государственного управления МГУ ЦДО    </div>
+<ul class="navbar-nav ml-auto">
+<li class="topbar-divider d-none d-sm-block"></li>
+<li class="nav-item dropdown no-arrow">
+<a class="dropdown-toggle nav-link" data-toggle="dropdown" href="#">Русский <span class="caret"></span></a><div class="dropdown-menu"><a class="dropdown-item" href="/language?app_language=en">English</a><a class="active dropdown-item" href="/language?app_language=ru">Русский</a></div> </li>
+<li class="topbar-divider d-none d-sm-block"></li><li class="nav-item mx-1"><a class="nav-link" href="/profile"><i class="fa-fw mr-1 fas fa-paper-plane" title="Регистрация в чат-боте Telegram"></i></a></li> <li class="topbar-divider d-none d-sm-block"></li>
+<li class="nav-item dropdown no-arrow">
+<a class="nav-link dropdown-toggle" data-toggle="dropdown" href="#">
+                    Авторизация <span class="caret"></span>
+</a>
+<div aria-labelledby="userDropdown" class="dropdown-menu dropdown-menu-right shadow animated--grow-in">
+<a class="dropdown-item" href="/login"><i class="mr-2 fas fa-sign-in-alt"></i>Войти</a> </div>
+</li>
+</ul>
+</nav>
+<div class="container-fluid">
+<h1 class="h3 mb-1 text-gray-800" style="display:none">Расписание: Академ. группы </h1><nav aria-label="breadcrumb"><ol class="breadcrumb" id="w8"><li class="breadcrumb-item"><a href="/">Главная</a></li>
+<li aria-current="page" class="breadcrumb-item active">Расписание</li>
+<li aria-current="page" class="breadcrumb-item active">Академ. группы</li>
+</ol></nav><div id="w1"><div class="card shadow mb-2" id="w2"><div class="card-body"><form action="/time-table/group?type=0" class="filter-form" id="filter-form" method="POST">
+<div class="filter-form-fields-content row"><div class="form-group col-md-3"><label>Факультет</label><select class="form-control select2-field" id="timetableform-facultyid" name="TimeTableForm[facultyId]">
+<option value="">--Факультет--</option>
+<option selected="" value="5">Бакалавриат</option>
+<option value="8">Магистратура</option>
+<option value="9">Второе высшее образование</option>
+<option value="10">Аспирантура</option>
+</select></div><div class="form-group col-md-1"><label>Курс</label><select class="form-control select2-field" id="timetableform-course" name="TimeTableForm[course]">
+<option value="">--Курс--</option>
+<option selected="" value="1">1</option>
+<option value="2">2</option>
+<option value="3">3</option>
+<option value="4">4</option>
+</select></div><div class="form-group col-md-2"><label>Группа</label><select class="form-control select2-field" id="timetableform-groupid" name="TimeTableForm[groupId]">
+<option value="">--Группа--</option>
+<option selected="" value="1450">101гму</option>
+<option value="1451">102гму</option>
+<option value="1452">103гму</option>
+<option value="1453">104гму</option>
+<option value="1454">105мб</option>
+<option value="1455">108мб</option>
+<option value="1456">109мб</option>
+<option value="1457">107пб</option>
+<option value="1458">106уп</option>
+</select></div></div><div class="filter-form-extra-fields-content row"><div class="form-group col-md-3"><label>Отображаемый диапазон дат</label><input class="form-control submit" id="timetableform-datestart" name="date-picker" type="text" value=""/>
+<input class="form-control submit" id="timetableform-datestart" name="TimeTableForm[dateStart]" type="hidden" value="09.09.2026"/>
+<input class="form-control submit" id="timetableform-datestart" name="TimeTableForm[dateEnd]" type="hidden" value="09.09.2026"/>
+</div><div class="form-group col-md-2 col-sm-4"><label for="timetableform-indicationdays">Индикация изменений (дней)</label><input class="form-control submit" id="timetableform-indicationdays" name="TimeTableForm[indicationDays]" style="background:#36b9cc" type="number" value="5"/></div><div class="form-group col-md-2 col-sm-4 align-self-end"><input checked="" id="w0" name="time-table-type" type="checkbox" value="1"/></div></div></form></div></div></div><div class="card shadow mb-2" id="w5"><div class="card-body"><a class="btn btn-primary mb-2" href="/time-table/print?serviceId=group" id="w3" target="_blank"><i class="fas fa-print"></i> </a><div id="time-tablew4"><div class="table-container"><table class="table lesson-color-block" id="timeTable"><tr><th class="headday">Пн</th><th class="headdate"><div>07.09.2026</div></th></tr><tr> <th class="headcol">
+<span class="lesson">1 пара</span>
+<span class="start">09:40</span>
+<span class="end">11:10</span>
+</th><td class="closed" data-placement="top" data-toggle="tooltip" title="Выберите необходимый диапазон дат"> </td></tr><tr><th class="headday">Вт</th><th class="headdate"><div>08.09.2026</div></th></tr><tr> <th class="headcol">
+<span class="lesson">1 пара</span>
+<span class="start">09:40</span>
+<span class="end">11:10</span>
+</th><td class="closed" data-placement="top" data-toggle="tooltip" title="Выберите необходимый диапазон дат"> </td></tr><tr><th class="headday">Ср</th><th class="headdate"><div>09.09.2026</div></th></tr><tr> <th class="headcol">
+<span class="lesson">1 пара</span>
+<span class="start">09:40</span>
+<span class="end">11:10</span>
+</th><td><div class="cell"><div class="lesson-1">
+<div data-content="История России[Лк]&lt;br&gt;ауд. В3&lt;br&gt;101гму&lt;br&gt;Соловьев Константин Анатольевич&lt;br&gt;Добавлено:  18.05.2026" data-toggle="popover" title="09.09.2026 1 пара">
+            ИсторияРоссии<strong>[Лк]</strong><br/>
+<strong>ауд. В3</strong><br/>
+<i>Соловьев К.А.</i>
+</div>
+</div></div></td></tr><tr> <th class="headcol">
+<span class="lesson">2 пара</span>
+<span class="start">11:25</span>
+<span class="end">12:55</span>
+</th><td><div class="cell"><div class="lesson-3">
+<div data-content="История России[Сем]&lt;br&gt;ауд. Г 802&lt;br&gt;101гму&lt;br&gt;Сидоров Александр Валентинович&lt;br&gt;Добавлено:  02.06.2026" data-toggle="popover" title="09.09.2026 2 пара">
+            ИсторияРоссии<strong>[Сем]</strong><br/>
+<strong>ауд. Г 802</strong><br/>
+<i>Сидоров А.В.</i>
+</div>
+</div></div></td></tr><tr> <th class="headcol">
+<span class="lesson">3 пара</span>
+<span class="start">13:10</span>
+<span class="end">14:40</span>
+</th><td><div class="cell"><div class="lesson-1">
+<div data-content="Философия[Лк]&lt;br&gt;ауд. В3&lt;br&gt;101гму&lt;br&gt;Халуторных Ольга Николаевна&lt;br&gt;Добавлено:  26.08.2026" data-toggle="popover" title="09.09.2026 3 пара">
+            Фил<strong>[Лк]</strong><br/>
+<strong>ауд. В3</strong><br/>
+<i>Халуторных О.Н.</i>
+</div>
+</div></div></td></tr><tr> <th class="headcol">
+<span class="lesson">4 пара</span>
+<span class="start">15:40</span>
+<span class="end">17:10</span>
+</th><td><div class="cell"><div class="lesson-1">
+<div data-content="15:00-17:00&lt;br&gt;Библиотечно-библиографические занятия[Лк]&lt;br&gt;ауд. В3&lt;br&gt;101гму&lt;br&gt;Добавлено:  27.08.2026" data-toggle="popover" title="09.09.2026 4 пара">
+            15:00-17:00<br/> БиблБЗ <strong>[Лк]</strong><br/>
+<strong>ауд. В3</strong><br/>
+<i></i>
+</div>
+</div></div></td></tr><tr><th class="headday">Чт</th><th class="headdate"><div>10.09.2026</div></th></tr><tr> <th class="headcol">
+<span class="lesson">1 пара</span>
+<span class="start">09:40</span>
+<span class="end">11:10</span>
+</th><td class="closed" data-placement="top" data-toggle="tooltip" title="Выберите необходимый диапазон дат"> </td></tr><tr><th class="headday">Пт</th><th class="headdate"><div>11.09.2026</div></th></tr><tr> <th class="headcol">
+<span class="lesson">1 пара</span>
+<span class="start">09:40</span>
+<span class="end">11:10</span>
+</th><td class="closed" data-placement="top" data-toggle="tooltip" title="Выберите необходимый диапазон дат"> </td></tr><tr><th class="headday">Сб</th><th class="headdate"><div>12.09.2026</div></th></tr><tr> <th class="headcol">
+<span class="lesson">1 пара</span>
+<span class="start">09:40</span>
+<span class="end">11:10</span>
+</th><td class="closed" data-placement="top" data-toggle="tooltip" title="Выберите необходимый диапазон дат"> </td></tr><tr><th class="headday">Вс</th><th class="headdate"><div>13.09.2026</div></th></tr><tr> <th class="headcol">
+<span class="lesson">1 пара</span>
+<span class="start">09:40</span>
+<span class="end">11:10</span>
+</th><td class="closed" data-placement="top" data-toggle="tooltip" title="Выберите необходимый диапазон дат"> </td></tr></table></div></div></div></div>
+<div aria-hidden="true" class="fade modal" id="modal-view" role="dialog" tabindex="-1">
+<div class="modal-dialog modal-lg" role="document">
+<div class="modal-content">
+<div class="modal-header">
+<button class="close" data-dismiss="modal" type="button"><span aria-hidden="true">×</span></button>
+</div>
+<div class="modal-body">
+</div>
+</div>
+</div>
+</div> </div>
+</div>
+<footer class="sticky-footer bg-white">
+<div class="container my-auto">
+<div class="copyright text-center my-auto">
+<span>Copyright © 2008-2026 <a href="https://mkr.com.ru" target="_blank"> ООО "МКР" (https://mkr.com.ru)</a>. <b>Версия</b> 2.3.10</span>
+</div>
+</div>
+</footer>
+</div>
+<div class="mkr-spinner card shadow mb-2" id="spinner" style="display:none"><div class="card-body"><div class="spinner-border" role="status"><span class="sr-only">Идет загрузка...</span></div></div></div></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

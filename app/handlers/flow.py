@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from weakref import WeakValueDictionary
 
@@ -6,16 +7,20 @@ from aiogram import Bot, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart
 from aiogram.types import CallbackQuery, Message
+from pydantic import ValidationError
 
 from app.controller import StaleCallback
 from app.storage import StateStore
+from app.widgets.api import AnswerWidgetQuery, EditMessageWidgetData, SendWidget, WidgetQuery
+from app.widgets.presentation import state_fields, widget_html
 
 log = logging.getLogger(__name__)
 
 
 class FlowHandlers:
-    def __init__(self, controller, store: StateStore):
+    def __init__(self, controller, store: StateStore, *, widgets=False):
         self.controller, self.store = controller, store
+        self.widgets = widgets
         self._locks = WeakValueDictionary()
 
     def _lock(self, key):
@@ -32,12 +37,73 @@ class FlowHandlers:
         async with self._lock(key):
             screen = await self.controller.start()
             try:
-                sent = await bot.send_message(message.chat.id, screen.text, reply_markup=screen.keyboard)
+                if self.widgets and message.chat.type == "private":
+                    sent = await bot(
+                        SendWidget(chat_id=message.chat.id, html=widget_html(), **state_fields(screen))
+                    )
+                else:
+                    if self.widgets:
+                        await bot.send_message(
+                            message.chat.id, "Виджеты доступны в личке. Откройте бота и отправьте /start."
+                        )
+                        return
+                    sent = await bot.send_message(message.chat.id, screen.text, reply_markup=screen.keyboard)
             except TelegramAPIError as exc:
                 log.warning("Telegram start failed: %s", type(exc).__name__)
                 return
             screen.message_id = sent.message_id
             await self.store.set(key, screen)
+
+    async def widget_update(self, handler, event, data):
+        """Intercept the new update before aiogram's older event-type resolver."""
+        raw = (event.model_extra or {}).get("widget_query")
+        if raw is None:
+            return await handler(event, data)
+        if not self.widgets:
+            return None
+        try:
+            query = WidgetQuery.model_validate(raw)
+        except ValidationError:
+            log.warning("Unsupported widget query context")
+            return None
+        await self.widget_query(query, data["bot"])
+        return None
+
+    async def widget_query(self, query, bot):
+        key = (query.chat.id, query.from_user.id)
+        if query.chat.type != "private" or key[0] != key[1]:
+            await bot(
+                AnswerWidgetQuery(
+                    widget_query_id=query.id, data=json.dumps({"error": "Откройте бота в личке."})
+                )
+            )
+            return
+        # Answer before the site request (which can take longer than Telegram's 15s limit).
+        # The UI waits for the pushed state after this acknowledgement.
+        async with self._lock(key):
+            screen = await self.store.get(key)
+            if screen is None or screen.message_id != query.message_id or query.data not in screen.actions:
+                await bot(
+                    AnswerWidgetQuery(
+                        widget_query_id=query.id, data=json.dumps({"error": "Экран устарел. Отправь /start."})
+                    )
+                )
+                return
+            try:
+                await bot(AnswerWidgetQuery(widget_query_id=query.id))
+                next_screen = await self.controller.act(screen, query.data)
+                await bot(
+                    EditMessageWidgetData(
+                        chat_id=key[0], message_id=screen.message_id, **state_fields(next_screen)
+                    )
+                )
+            except StaleCallback:
+                return
+            except TelegramAPIError as exc:
+                log.warning("Telegram widget update failed: %s", type(exc).__name__)
+                return
+            next_screen.message_id = screen.message_id
+            await self.store.set(key, next_screen)
 
     async def callback(self, query: CallbackQuery, bot: Bot):
         if not isinstance(query.message, Message):
@@ -78,8 +144,8 @@ class FlowHandlers:
             await self.store.set(key, next_screen)
 
 
-def create_router(controller, store):
-    handlers = FlowHandlers(controller, store)
+def create_router(controller, store, *, handlers=None):
+    handlers = handlers or FlowHandlers(controller, store)
     router = Router(name="schedule")
     router.message.register(handlers.start, CommandStart())
     router.callback_query.register(handlers.callback)

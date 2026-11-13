@@ -7,6 +7,9 @@ from bs4 import BeautifulSoup
 
 from app.models.schedule import DaySchedule, Lesson, Option
 
+# Numbers belong to the timetable grid, even when earlier rows are absent.
+PAIR_STARTS = ("09:40", "11:25", "13:10", "15:40", "17:25", "19:10", "20:55")
+
 
 class SourceError(Exception):
     """Unavailable source, expired selection, or unrecognised source format."""
@@ -30,8 +33,6 @@ def parse_schedule(html: str, selected: date) -> DaySchedule:
     result = DaySchedule(selected)
     dates = []
     found = False
-    slot_numbers = {}
-    next_pair_number = 0
     for row in table.find_all("tr"):
         headers = row.select("th.headdate")
         if headers:
@@ -53,11 +54,10 @@ def parse_schedule(html: str, selected: date) -> DaySchedule:
         if start is None or end is None:
             raise SourceError("Missing lesson time")
         begin, finish = start.get_text(strip=True), end.get_text(strip=True)
-        slot = (begin, finish)
-        if slot not in slot_numbers:
-            next_pair_number += 1
-            slot_numbers[slot] = next_pair_number
-        pair_number = slot_numbers[slot]
+        try:
+            pair_number = PAIR_STARTS.index(begin.zfill(5)) + 1
+        except ValueError as exc:
+            raise SourceError(f"Unknown timetable slot: {begin}") from exc
         cards = cell.select('[data-toggle="popover"][data-content]')
         if not cards and cell.get_text(strip=True).replace("\xa0", ""):
             raise SourceError("Unrecognised lesson markup")
