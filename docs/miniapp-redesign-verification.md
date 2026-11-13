@@ -18,3 +18,13 @@ Boundaries:
 - No claim that Bothost has deployed this commit or that the current Telegram menu reaches it.
 - MyFGU's observed web protocol is not a documented third-party API and may change.
 - Sessions remain only in server memory for up to one hour, so a server restart requires sign-in again. Passwords are not persisted.
+
+## Automatic CDO group selection follow-up
+
+The observed `/students/me` response is used by MyFGU's web client for `group.id` and `group.course`. Live public `GET /api/web/groups` confirmed the catalogue schema: `id`, `name`, `education_level_id`, `course`; for example `204гму` is ID `1320`, education level `5`, course `2` on the inspection date.
+
+Login/status now includes a catalogue-validated `group_selection`. The browser applies it after login and session restoration, hydrates all three group selectors, loads that group's day and remembers it. Auth generation guards prevent an obsolete account response from overriding a later login/logout. Missing catalogue data does not cause guessing by name or prevent the personal student timetable.
+
+Follow-up verification: 32 Python tests pass; browser checks at 320/390/1100 pixels pass including replacement of an old manual group selection. Separate students in one group retain different `studentId` timetable requests and subgroup responses in controlled upstream tests. Real account subgroup membership is still not independently inspected.
+
+Hosting observation before publishing this follow-up: `/healthz` returned 200 `ok`; the public page already contained the redesigned tabs and ring intro; Telegram menu URL pointed to the Bothost domain. This confirms the earlier redesign was served, not that a phone's already-open Mini App had reloaded it.

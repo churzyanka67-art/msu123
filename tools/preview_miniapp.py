@@ -38,7 +38,9 @@ def main():
                 return httpx.Response(401, json={})
             return httpx.Response(200, json={"token": "PREVIEW_ONLY", "user": {"firstname": "Дени", "lastname": "Студент"}})
         if request.url.path.endswith("/students/me"):
-            return httpx.Response(200, json={"student": {"id": 42}, "group": {"name": "204гму"}})
+            return httpx.Response(200, json={"student": {"id": 42}, "group": {"id": 1451, "name": "102гму", "course": 1}})
+        if request.url.path.endswith("/groups"):
+            return httpx.Response(200, json=[{"id": 1451, "name": "102гму", "course": 1, "education_level_id": 5}])
         if request.url.path.endswith("/timetable/student"):
             day = json.loads(request.content)["dateStart"]
             return httpx.Response(200, json=[{"date": day, "lessons": [{"number": 2, "periods": [{

@@ -124,6 +124,30 @@ class CdoSessions:
         except ValueError:
             raise CdoError("ЦДО вернуло нечитаемый ответ.") from None
 
+    async def _group_selection(self, client, group):
+        """Resolve the account's group ID using MyFGU's public catalogue."""
+        if not isinstance(group, dict) or type(group.get("id")) not in (str, int):
+            return None
+        group_id = str(group["id"])
+        if not re.fullmatch(r"[1-9][0-9]{0,9}", group_id):
+            return None
+        try:
+            catalog = await self._request(client, "GET", "/api/web/groups")
+        except CdoError as error:
+            if error.status == 401:
+                raise
+            return None
+        if not isinstance(catalog, list):
+            return None
+        matches = [entry for entry in catalog if isinstance(entry, dict) and str(entry.get("id")) == group_id]
+        if len(matches) != 1:
+            return None
+        entry = matches[0]
+        values = {"faculty": entry.get("education_level_id"), "course": entry.get("course"), "group": entry.get("id")}
+        if any(type(value) not in (int, str) or not re.fullmatch(r"[1-9][0-9]{0,9}", str(value)) for value in values.values()):
+            return None
+        return {key: str(value) for key, value in values.items()}
+
     async def login(self, user_id, username, password):
         if not isinstance(username, str) or not isinstance(password, str):
             raise CdoError("Введи логин и пароль ЦДО.", 400)
@@ -161,7 +185,8 @@ class CdoSessions:
                 name = " ".join(value for value in (user.get("firstname"), user.get("lastname")) if isinstance(value, str)) or username
                 group = student.get("group")
                 group_name = group.get("name", "") if isinstance(group, dict) else ""
-                profile = {"connected": True, "name": name, "group": group_name if isinstance(group_name, str) else ""}
+                profile = {"connected": True, "name": name, "group": group_name if isinstance(group_name, str) else "",
+                           "group_selection": await self._group_selection(client, group)}
                 await self._drop(user_id)
                 self._sessions[user_id] = Session(client, str(student_id), profile, now + 3600)
                 return dict(profile)

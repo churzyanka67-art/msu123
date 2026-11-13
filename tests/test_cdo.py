@@ -29,7 +29,14 @@ class CdoTests(unittest.IsolatedAsyncioTestCase):
             if self.mode == "expired":
                 return httpx.Response(401, json={})
             if path.endswith("/students/me"):
-                return httpx.Response(200, json={"student": {"id": 42}, "group": {"name": "204гму"}})
+                student_id = 84 if request.headers.get("authorization", "").endswith("bob") else 42
+                return httpx.Response(200, json={"student": {"id": student_id}, "group": {"id": 1320, "name": "204гму", "course": 2}})
+            if path.endswith("/groups"):
+                if self.mode == "catalog_offline":
+                    return httpx.Response(503, json={})
+                if self.mode == "unknown_group":
+                    return httpx.Response(200, json=[{"id": 999, "name": "204гму", "course": 2, "education_level_id": 5}])
+                return httpx.Response(200, json=[{"id": 1320, "name": "204гму", "course": 2, "education_level_id": 5}])
             if path.endswith("/timetable/student"):
                 if self.mode == "malformed":
                     return httpx.Response(200, json={"unexpected": True})
@@ -37,7 +44,7 @@ class CdoTests(unittest.IsolatedAsyncioTestCase):
                     "date": "2026-11-14", "lessons": [{"number": 2, "periods": [{
                         "timeStart": "11:25", "timeEnd": "12:55",
                         "disciplineFullName": "Личная дисциплина", "teachersNameFull": "Преподаватель",
-                        "classroom": "А 716", "typeStr": "Сем", "groups": "Моя подгруппа",
+                        "classroom": "А 716", "typeStr": "Сем", "groups": "Подгруппа " + ("2" if json.loads(request.content)["studentId"] == "84" else "1"),
                     }]}],
                 }])
             return httpx.Response(404)
@@ -52,6 +59,7 @@ class CdoTests(unittest.IsolatedAsyncioTestCase):
         await self.sessions.login(8, "bob", "valid")
         self.assertEqual(profile["name"], "alice Студент")
         self.assertEqual(profile["group"], "204гму")
+        self.assertEqual(profile["group_selection"], {"faculty": "5", "course": "2", "group": "1320"})
         self.assertNotIn("private-token", json.dumps(profile))
         self.assertFalse((await self.sessions.status(9))["connected"])
         data = await self.sessions.schedule(7, date(2026, 11, 14))
@@ -84,6 +92,26 @@ class CdoTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(CdoError) as error:
             await self.sessions.schedule(7, date(2026, 11, 14))
         self.assertEqual(error.exception.status, 502)
+
+    async def test_students_in_same_group_keep_their_own_subgroups(self):
+        alice = await self.sessions.login(7, "alice", "valid")
+        bob = await self.sessions.login(8, "bob", "valid")
+        self.assertEqual(alice["group_selection"], bob["group_selection"])
+        first = await self.sessions.schedule(7, date(2026, 11, 14))
+        self.assertEqual(json.loads(self.requests[-1].content)["studentId"], "42")
+        second = await self.sessions.schedule(8, date(2026, 11, 14))
+        self.assertEqual(json.loads(self.requests[-1].content)["studentId"], "84")
+        self.assertEqual(first[0]["groups"], "Подгруппа 1")
+        self.assertEqual(second[0]["groups"], "Подгруппа 2")
+
+    async def test_missing_catalog_does_not_guess_group_by_name_or_block_personal(self):
+        for mode in ["catalog_offline", "unknown_group"]:
+            self.mode = mode
+            profile = await self.sessions.login(7, "alice", "valid")
+            self.assertTrue(profile["connected"])
+            self.assertIsNone(profile["group_selection"])
+            data = await self.sessions.schedule(7, date(2026, 11, 14))
+            self.assertEqual(data[0]["groups"], "Подгруппа 1")
 
     async def test_local_and_upstream_expiry_clear_connection(self):
         await self.sessions.login(7, "alice", "valid")

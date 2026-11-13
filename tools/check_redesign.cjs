@@ -25,12 +25,12 @@ const initData=new URLSearchParams(fields).toString();
           connected=true;
         }
         if(method==='DELETE')connected=false;
-        return r.fulfill({json:connected?{connected:true,name:'Дени Студент',group:'204гму'}:{connected:false}});
+        return r.fulfill({json:connected?{connected:true,name:'Дени Студент',group:'102гму',group_selection:{faculty:'5',course:'1',group:'1451'}}:{connected:false}});
       });
       await page.route('**/api/cdo/schedule*',r=>{
         if(failPersonal){failPersonal=false;return r.fulfill({status:503,json:{error:'ЦДО временно не отвечает.'}});}
         const day=new URL(r.request().url()).searchParams.get('date')||'2026-09-09';
-        return r.fulfill({json:{date:day,today:'2026-09-09',now:'2026-09-09T08:00:00+03:00',weekday:'Среда',label:day==='2026-09-09'?'9 сентября':'10 сентября',group:{name:'204гму'},lessons:[{start_time:'11:25',end_time:'12:55',subject:'Моя личная дисциплина',pair_number:2,teacher:'Преподаватель',classroom:'А 716',lesson_type:'Сем',groups:'Подгруппа 1'}]}});
+        return r.fulfill({json:{date:day,today:'2026-09-09',now:'2026-09-09T08:00:00+03:00',weekday:'Среда',label:day==='2026-09-09'?'9 сентября':'10 сентября',group:{name:'102гму'},lessons:[{start_time:'11:25',end_time:'12:55',subject:'Моя личная дисциплина',pair_number:2,teacher:'Преподаватель',classroom:'А 716',lesson_type:'Сем',groups:'Подгруппа 1'}]}});
       });
       await page.goto('http://127.0.0.1:8081');
       await page.locator('#splash').waitFor({state:'attached',timeout:2000});
@@ -54,6 +54,7 @@ const initData=new URLSearchParams(fields).toString();
       if(await page.locator('#cdo-password').inputValue())throw new Error('Password remained after submission');
       await page.fill('#cdo-password','valid');await page.click('#cdo-login');
       await page.locator('#cdo-notice').filter({hasText:'ЦДО временно'}).waitFor();
+      await page.waitForFunction(()=>document.getElementById('profile-group-name').textContent==='102гму',{},{timeout:3000});
       await page.locator('#personal-retry').click({timeout:3000});
       await page.locator('#personal-lessons').filter({hasText:'Моя личная дисциплина'}).waitFor({timeout:5000}).catch(async error=>{console.log('PERSONAL STATE',await page.locator('body').innerText());await page.screenshot({path:'preview/personal-failure.png',fullPage:true});throw error;});
       releaseInitial();await page.locator('#profile-notice').waitFor({state:'hidden'});
@@ -61,6 +62,12 @@ const initData=new URLSearchParams(fields).toString();
       await page.click('#personal-next');await page.locator('#personal-date-label').filter({hasText:'10 сентября'}).waitFor();
       await page.screenshot({path:`preview/redesign-personal-${width}.png`,fullPage:true,animations:'disabled'});
       await page.click('#nav-day');if(!await page.locator('#date-label').textContent().then(t=>t.includes('9 сентября')))throw new Error('Personal navigation overwrote group date');
+      if(!await page.locator('#change-group').textContent().then(t=>t.includes('102гму')))throw new Error('CDO did not choose account group');
+      if(await page.evaluate(()=>JSON.parse(localStorage.getItem('fgu-selection-v1')).group)!=='1451')throw new Error('CDO group was not remembered');
+      await page.evaluate(()=>localStorage.setItem('fgu-selection-v1',JSON.stringify({faculty:'5',course:'1',group:'1450'})));
+      await page.reload();await page.locator('#splash').waitFor({state:'hidden'});
+      await page.locator('#change-group').filter({hasText:'102гму'}).waitFor({timeout:5000});
+      if(await page.evaluate(()=>JSON.parse(localStorage.getItem('fgu-selection-v1')).group)!=='1451')throw new Error('Restored CDO session did not override stale stored group');
       await page.click('#nav-profile');await page.locator('#profile-cdo').filter({hasText:'Дени Студент'}).waitFor();await page.click('#cdo-logout');
       await page.click('#nav-personal');await page.locator('#cdo-form').waitFor({state:'visible'});
       if(await page.locator('#personal-lessons').isVisible())throw new Error('Personal data remained visible after logout');

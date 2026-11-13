@@ -7,6 +7,8 @@ let tg = null, initData = '', selected = {faculty:'', course:'', group:''};
 let groupOptions = [], current = null, personal = null, cdoProfile = null, activeTab = 'day', appliedSelection = null;
 let retryAction = null, personalRetry = null, catalogLoaded = false;
 let authGeneration = 0, authMutationPending = false;
+let cdoGroupSync = null, lastCdoGroupKey = '';
+const groupWaiters = [];
 
 function node(tag, text, cls) {
   const element=document.createElement(tag);
@@ -82,7 +84,7 @@ async function task(action,scope='group'){
     notice(id,error.message||'Не удалось загрузить данные.',true);
     if(scope==='group'){retryAction=action;$('retry').hidden=false;}
     if(scope==='personal'&&error.status!==401){personalRetry=action;$('personal-retry').hidden=false;}
-  }finally{pending.delete(scope);syncControls();}
+  }finally{pending.delete(scope);syncControls();if(scope==='group')groupWaiters.splice(0).forEach(resolve=>resolve());}
 }
 function openView(view){
   activeTab=view==='selection'?'day':view;
@@ -105,7 +107,7 @@ function renderGroups(){
 }
 function remember(){try{localStorage.setItem(storageKey,JSON.stringify(appliedSelection));}catch{}}
 function shift(day,delta){const d=new Date(day+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+delta);return d.toISOString().slice(0,10);}
-async function loadDay(day,refresh=false,choice=appliedSelection||selected){const query={...choice};if(day)query.date=day;if(refresh)query.refresh='1';const data=await api('schedule',query);current=data;appliedSelection={...choice};remember();renderSchedule(data);renderNearest();$('group-day-card').hidden=false;$('profile-group-name').textContent=data.group.name;}
+async function loadDay(day,refresh=false,choice=appliedSelection||selected,stillCurrent=()=>true){const query={...choice};if(day)query.date=day;if(refresh)query.refresh='1';const data=await api('schedule',query);if(!stillCurrent())return false;current=data;appliedSelection={...choice};remember();renderSchedule(data);renderNearest();$('group-day-card').hidden=false;$('profile-group-name').textContent=data.group.name;return true;}
 function renderNearest(){
   const data=current,now=new Date(data.now),clock=now.toLocaleTimeString('en-GB',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
   const nearest=data.lessons.find(lesson=>data.date>data.today||(data.date===data.today&&lesson.end_time>clock));
@@ -140,7 +142,34 @@ function setCdoProfile(profile){
   $('profile-connect').hidden=connected;$('cdo-logout').hidden=!connected;
   if(!connected){personal=null;$('personal-lessons').replaceChildren();$('personal-date-label').textContent='';}
 }
-async function checkCdo(){const generation=authGeneration,profile=await api('cdo/session');if(generation===authGeneration)setCdoProfile(profile);}
+async function applyCdoGroup(profile){
+  const choice=profile?.group_selection;
+  if(!profile?.connected||!choice||!['faculty','course','group'].every(key=>typeof choice[key]==='string'&&choice[key]))return;
+  const generation=authGeneration,key=generation+':'+JSON.stringify(choice);
+  if(lastCdoGroupKey===key)return;
+  if(cdoGroupSync?.key===key)return cdoGroupSync.promise;
+  const stillCurrent=()=>generation===authGeneration&&cdoProfile?.connected&&JSON.stringify(cdoProfile.group_selection)===JSON.stringify(choice);
+  const promise=(async()=>{
+    while(pending.has('group'))await new Promise(resolve=>groupWaiters.push(resolve));
+    if(!stillCurrent())return;
+    await task(async()=>{
+      const faculties=(await api('options')).options;
+      if(!faculties.some(option=>option.id===choice.faculty))throw new Error('Группа ЦДО пока не найдена в каталоге расписания.');
+      const courses=(await api('options',{faculty:choice.faculty})).options;
+      if(!courses.some(option=>option.id===choice.course))throw new Error('Курс из ЦДО пока не найден в каталоге расписания.');
+      const groups=(await api('options',{faculty:choice.faculty,course:choice.course})).options;
+      if(!groups.some(option=>option.id===choice.group))throw new Error('Группа ЦДО пока не найдена в каталоге расписания.');
+      if(!stillCurrent()||!await loadDay(undefined,false,choice,stillCurrent))return;
+      selected={...choice};catalogLoaded=true;groupOptions=groups;
+      fillSelect('faculty',faculties,'Выбери направление');$('faculty').value=choice.faculty;
+      fillSelect('course',courses,'Выбери курс');$('course').value=choice.course;
+      $('group-search').value='';renderGroups();lastCdoGroupKey=key;
+    });
+  })();
+  cdoGroupSync={key,promise};
+  try{await promise;}finally{if(cdoGroupSync?.promise===promise)cdoGroupSync=null;}
+}
+async function checkCdo(){const generation=authGeneration,profile=await api('cdo/session');if(generation===authGeneration){setCdoProfile(profile);await applyCdoGroup(profile);}}
 async function loadPersonal(day){const generation=authGeneration,query={};if(day)query.date=day;const data=await api('cdo/schedule',query);if(generation!==authGeneration)return;personal=data;renderSchedule(personal,'personal-');$('personal-day-card').hidden=false;}
 async function ensurePersonal(){await checkCdo();if(cdoProfile.connected&&!personal)await loadPersonal();}
 
@@ -161,7 +190,7 @@ $('cdo-form').onsubmit=event=>{
   let body=JSON.stringify({username:$('cdo-username').value,password:$('cdo-password').value});$('cdo-password').value='';$('cdo-password').type='password';$('password-toggle').textContent='Показать';$('password-toggle').setAttribute('aria-pressed','false');
   // Login is intentionally not a retry closure: never retain a password after the request.
   pending.add('personal');syncControls();notice('cdo-notice','Подключаем ЦДО…');$('personal-retry').hidden=true;
-  (async()=>{try{const profile=await api('cdo/session',{}, {method:'POST',body});body=null;if(generation!==authGeneration)return;personal=null;setCdoProfile(profile);await loadPersonal();notice('cdo-notice','');haptic();}
+  (async()=>{try{const profile=await api('cdo/session',{}, {method:'POST',body});body=null;if(generation!==authGeneration)return;personal=null;setCdoProfile(profile);await applyCdoGroup(profile);await loadPersonal();notice('cdo-notice','');haptic();}
     catch(error){if(generation!==authGeneration)return;if(error.status===401)setCdoProfile({connected:false});else if(cdoProfile?.connected){personalRetry=()=>loadPersonal();$('personal-retry').hidden=false;}notice('cdo-notice',error.message||'Не удалось войти.',true);}
     finally{body=null;pending.delete('personal');syncControls();}})();
 };
