@@ -11,10 +11,12 @@ from zoneinfo import ZoneInfo
 from aiohttp import web
 
 from app.formatting import DAYS, MONTHS
+from app.miniapp.cdo import CdoError, CdoSessions
 from app.services.parser import SourceError
 
 STATIC = Path(__file__).with_name("static")
 MOSCOW = ZoneInfo("Europe/Moscow")
+TELEGRAM_USER = web.RequestKey("telegram_user", dict)
 
 
 def validate_init_data(raw, token, *, now=None, max_age=86400):
@@ -39,20 +41,23 @@ def validate_init_data(raw, token, *, now=None, max_age=86400):
     return user
 
 
-def create_app(service, token, *, clock=None):
+def create_app(service, token, *, clock=None, cdo=None):
     clock = clock or (lambda: datetime.now(MOSCOW))
+    cdo = cdo if cdo is not None else CdoSessions()
 
     @web.middleware
     async def security(request, handler):
         if request.path.startswith("/api/"):
             try:
-                validate_init_data(request.headers.get("X-Telegram-Init-Data", ""), token)
+                request[TELEGRAM_USER] = validate_init_data(request.headers.get("X-Telegram-Init-Data", ""), token)
             except (ValueError, TypeError, json.JSONDecodeError):
                 return web.json_response(
                     {"error": "Открой миниап заново через кнопку в Telegram."}, status=401
                 )
         try:
             response = await handler(request)
+        except CdoError as error:
+            response = web.json_response({"error": str(error)}, status=error.status)
         except SourceError:
             response = web.json_response(
                 {"error": "Сайт МГУ пока не отвечает. Попробуй ещё раз."}, status=503
@@ -130,10 +135,53 @@ def create_app(service, token, *, clock=None):
     async def health(request):
         return web.Response(text="ok")
 
+    async def cdo_session(request):
+        user_id = request[TELEGRAM_USER]["id"]
+        if request.method == "DELETE":
+            await cdo.logout(user_id)
+            return web.json_response({"connected": False})
+        if request.method == "GET":
+            return web.json_response(await cdo.status(user_id))
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeDecodeError):
+            return web.json_response({"error": "Введи логин и пароль ЦДО."}, status=400)
+        if not isinstance(body, dict) or not isinstance(body.get("username"), str) or not isinstance(body.get("password"), str):
+            return web.json_response({"error": "Введи логин и пароль ЦДО."}, status=400)
+        return web.json_response(await cdo.login(user_id, body["username"], body["password"]))
+
+    async def personal_schedule(request):
+        user_id = request[TELEGRAM_USER]["id"]
+        now = clock().astimezone(MOSCOW)
+        day = date.fromisoformat(request.query["date"]) if request.query.get("date") else now.date()
+        if abs((day - now.date()).days) > 366:
+            raise ValueError("Date outside range")
+        lessons = await cdo.schedule(user_id, day)
+        advanced = False
+        if not request.query.get("date") and lessons and now.time() >= max(time.fromisoformat(x["end_time"]) for x in lessons):
+            day += timedelta(days=1)
+            lessons = await cdo.schedule(user_id, day)
+            advanced = True
+        profile = await cdo.status(user_id)
+        return web.json_response({
+            "date": day.isoformat(), "today": now.date().isoformat(), "now": now.isoformat(),
+            "weekday": DAYS[day.weekday()], "label": f"{day.day} {MONTHS[day.month - 1]}",
+            "group": {"name": profile.get("group") or "Личное расписание"},
+            "lessons": lessons, "advanced": advanced,
+        })
+
+    async def close_cdo(app):
+        await cdo.close()
+
     app = web.Application(middlewares=[security], client_max_size=16384)
     app.router.add_get("/", index)
     app.router.add_get("/healthz", health)
     app.router.add_get("/api/options", options)
     app.router.add_get("/api/schedule", schedule)
+    app.router.add_get("/api/cdo/session", cdo_session)
+    app.router.add_post("/api/cdo/session", cdo_session)
+    app.router.add_delete("/api/cdo/session", cdo_session)
+    app.router.add_get("/api/cdo/schedule", personal_schedule)
     app.router.add_static("/assets/", STATIC, show_index=False)
+    app.on_cleanup.append(close_cdo)
     return app

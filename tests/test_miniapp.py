@@ -45,6 +45,9 @@ class AuthTests(unittest.TestCase):
 class ApiTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.service = AsyncMock()
+        self.cdo = AsyncMock()
+        self.cdo.status.return_value = {"connected": True, "name": "Студент", "group": "204гму"}
+        self.cdo.schedule.return_value = [{"start_time": "11:25", "end_time": "12:55", "subject": "Личные пары", "pair_number": 2}]
         self.service.get_faculties.return_value = [Option("5", "Бакалавриат")]
         self.service.get_courses.return_value = [Option("1", "1")]
         self.service.get_groups.return_value = [Option("7", "204гму")]
@@ -54,7 +57,7 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
             return DaySchedule(day, [Lesson("11:25", "15:40", "История", pair_number=2)])
 
         self.service.get_schedule.side_effect = schedule
-        self.client = TestClient(TestServer(create_app(self.service, TOKEN, clock=lambda: self.now)))
+        self.client = TestClient(TestServer(create_app(self.service, TOKEN, clock=lambda: self.now, cdo=self.cdo)))
         await self.client.start_server()
         self.headers = {"X-Telegram-Init-Data": credentials()}
 
@@ -97,6 +100,35 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.get("/api/schedule", params=args, headers=self.headers)
         self.assertEqual(response.status, 503)
         self.assertNotIn(TOKEN, await response.text())
+
+    async def test_cdo_routes_require_signed_user_and_do_not_trust_student_id(self):
+        response = await self.client.post("/api/cdo/session", json={"username": "alice", "password": "secret"})
+        self.assertEqual(response.status, 401)
+        self.cdo.login.assert_not_called()
+        self.cdo.login.return_value = {"connected": True, "name": "Студент", "group": "204гму"}
+        response = await self.client.post("/api/cdo/session", json={"username": "alice", "password": "secret"}, headers=self.headers)
+        self.assertEqual(response.status, 200)
+        self.cdo.login.assert_awaited_once_with(7, "alice", "secret")
+        response = await self.client.get("/api/cdo/schedule?date=2026-11-13&studentId=999&user_id=8", headers=self.headers)
+        self.assertEqual(response.status, 200)
+        self.cdo.schedule.assert_awaited_once_with(7, self.now.date())
+        self.assertEqual((await response.json())["lessons"][0]["subject"], "Личные пары")
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+        response = await self.client.delete("/api/cdo/session", headers=self.headers)
+        self.assertEqual(response.status, 200)
+        self.cdo.logout.assert_awaited_once_with(7)
+
+    async def test_cdo_date_payload_and_expired_session_errors(self):
+        from app.miniapp.cdo import CdoError
+        for body in [[], None, {"username": 123, "password": "x"}]:
+            response = await self.client.post("/api/cdo/session", json=body, headers=self.headers)
+            self.assertEqual(response.status, 400)
+        response = await self.client.get("/api/cdo/schedule?date=bad", headers=self.headers)
+        self.assertEqual(response.status, 400)
+        self.cdo.schedule.side_effect = CdoError("Войди заново.", 401)
+        response = await self.client.get("/api/cdo/schedule", headers=self.headers)
+        self.assertEqual(response.status, 401)
+        self.assertEqual((await response.json())["error"], "Войди заново.")
 
 
 if __name__ == "__main__":

@@ -5,28 +5,49 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#eeeef2">
   <title>Расписание ФГУ</title>
-  <link rel="stylesheet" href="/assets/style.css">
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/assets/app.js" defer></script>
+  <link rel="stylesheet" href="/assets/style.css?v=2">
+  <script src="/assets/app.js?v=2" defer></script>
+  <script src="https://telegram.org/js/telegram-web-app.js" async></script>
 </head>
-<body>
-  <header class="app-header">
-    <a class="brand" href="#" aria-label="Расписание ФГУ"><span class="brand-mark">фгу<span>↗</span></span><span>ТВОЁ<br>РАСПИСАНИЕ</span></a>
-    <button id="fullscreen" class="icon-button" aria-label="Открыть на весь экран" title="На весь экран">⛶</button>
-  </header>
-  <main>
-    <section class="intro"><p class="eyebrow">МЕНЬШЕ СУЕТЫ. БОЛЬШЕ ЯСНОСТИ.</p><h1>Твой день.<br><span>Ничего лишнего.</span></h1><p>Пары, аудитории и твоя группа — с одного взгляда.</p></section>
-    <div id="status" class="status" role="status" aria-live="polite" hidden></div>
-    <button id="retry" class="retry" hidden>Попробовать ещё раз ↻</button>
-    <div class="layout">
-      <div class="left-column">
-        <section id="nearest-section"><p class="section-label">01 / БЛИЖАЙШАЯ ПАРА</p><article id="nearest" class="card near"><p class="lime">Всё начинается с твоей группы</p><h2>Здесь будет<br>твоя ближайшая пара.</h2><p class="muted">Выбери направление, курс и группу ниже.</p><div class="near-footer"><span>Без поисков в чатах</span><span class="pill">↗</span></div></article></section>
-        <section id="selection-section"><p class="section-label">02 / МОЯ ГРУППА</p><article class="card selection"><p class="muted">Твоё расписание</p><h2>Моя группа</h2><p class="muted">Один раз выбери. Мы запомним.</p><div class="selects"><label>Направление<select id="faculty" aria-label="Направление" disabled><option>Загружаю…</option></select></label><label>Курс<select id="course" aria-label="Курс" disabled><option value="">Выбери</option></select></label></div><label class="group-label" for="group-search">Найти группу</label><input id="group-search" type="search" placeholder="Например, 204гму" autocomplete="off" disabled><div id="groups" class="groups" role="group" aria-label="Группы"><p class="muted">Сначала выбери направление и курс.</p></div><button id="show" class="wide primary" disabled>Показать расписание <span>↗</span></button></article></section>
-      </div>
-      <section id="day-section"><p class="section-label">03 / РАСПИСАНИЕ НА ДЕНЬ</p><article class="card day"><div class="day-head"><span id="weekday" class="lime">Всё по порядку</span><button id="change-group" class="pill" aria-label="Сменить группу">Моя группа ↗</button></div><h2 class="date"><span id="date-label">Твой учебный день</span> <small id="year"></small></h2><div class="day-meta"><span id="pair-count">Пары появятся здесь</span><span id="day-range" class="muted"></span></div><div id="track" class="track" aria-hidden="true"></div><div id="lessons" class="lessons"><div class="empty"><span class="empty-symbol">↗</span><h3>Каждой паре — своё место.</h3><p class="muted">Выбери группу и открой расписание.<br>Остальное мы уже разложили по полочкам.</p></div></div><div id="day-nav" class="day-nav" hidden><button id="previous" aria-label="Предыдущий день">←</button><button id="today">Сегодня</button><button id="next" aria-label="Следующий день">Завтра →</button></div><div class="source"><span>Данные с сайта ФГУ МГУ</span><button id="refresh" class="text-button" disabled>Обновить ↻</button></div></article></section>
-    </div>
-    <footer class="page-footer"><strong>РАСПИСАНИЕ ФГУ</strong><span>Учёба по плану. Жизнь — как захочешь.</span></footer>
-  </main>
-  <nav class="bottom-nav" aria-label="Разделы"><button id="nav-day" class="active">▤ <span>Расписание</span></button><button id="nav-group">▦ <span>Моя группа</span></button></nav>
+<body class="intro-running">
+  <svg class="icon-library" aria-hidden="true"><defs>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="4"/><path d="M7 3v4m10-4v4M3 11h18m-13 5h2m4 0h2"/></symbol>
+    <symbol id="i-personal" viewBox="0 0 24 24"><path d="M7 21H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-2M8 3v4m8-4v4"/><circle cx="12" cy="13" r="2.5"/><path d="M7 21v-1a5 5 0 0 1 10 0v1"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></symbol>
+  </defs></svg>
+  <div id="splash" class="splash" aria-hidden="true"><div class="splash-orbit"><span class="splash-ring ring-white"></span><span class="splash-ring ring-lime"></span></div></div>
+  <div class="app-shell">
+    <header class="app-header">
+      <a id="home" class="brand" href="#" aria-label="Расписание ФГУ"><span id="brand-mark" class="brand-mark"><i></i><i></i></span><span>ФГУ <span class="brand-divider">/</span> <span class="brand-caption">РАСПИСАНИЕ</span></span></a>
+      <button id="fullscreen" class="icon-button" aria-label="Открыть на весь экран">⛶</button>
+    </header>
+    <main>
+      <div class="page-heading"><p class="eyebrow" id="page-eyebrow">ТВОЙ УЧЕБНЫЙ ДЕНЬ</p><h1 id="page-title">Расписание<span class="heading-dot">.</span></h1></div>
+      <div id="status" class="status" role="status" aria-live="polite" hidden></div><button id="retry" class="retry" hidden>Попробовать ещё раз ↻</button>
+      <section id="day-screen" class="screen">
+        <article id="nearest" class="card near"><p class="lime">Начнём с твоей группы</p><h2>Все пары.<br>В одном месте.</h2><p class="muted">Выбери группу один раз — мы её запомним.</p><button id="choose-group" class="wide primary">Выбрать группу <span>↗</span></button></article>
+        <article id="group-day-card" class="card day" hidden>
+          <div class="day-head"><span id="weekday" class="lime"></span><button id="change-group" class="pill">Моя группа ↗</button></div><h2 class="date"><span id="date-label"></span> <small id="year"></small></h2>
+          <div class="day-meta"><span id="pair-count"></span><span id="day-range" class="muted"></span></div><div id="track" class="track" aria-hidden="true"></div><div id="lessons" class="lessons"></div>
+          <div id="day-nav" class="day-nav"><button id="previous" aria-label="Предыдущий день">←</button><button id="today">Сегодня</button><button id="next" aria-label="Следующий день">Завтра →</button></div>
+          <div class="source"><span>Расписание группы · ФГУ МГУ</span><button id="refresh" class="text-button">Обновить ↻</button></div>
+        </article>
+      </section>
+      <section id="selection-screen" class="screen" hidden><button id="selection-back" class="back-button">← К расписанию</button>
+        <article class="card selection"><p class="lime">Настроим под тебя</p><h2>Моя группа</h2><p class="muted">Направление, курс — и можно начинать.</p>
+          <div class="selects"><label>Направление<select id="faculty" disabled><option value="">Загружаю…</option></select></label><label>Курс<select id="course" disabled><option value="">Выбери</option></select></label></div>
+          <label class="group-label" for="group-search">Найти группу</label><input id="group-search" type="search" placeholder="Например, 204гму" autocomplete="off" disabled><div id="groups" class="groups" role="group" aria-label="Группы"><p class="muted">Сначала выбери направление и курс.</p></div><button id="show" class="wide primary" disabled>Показать расписание <span>↗</span></button>
+        </article>
+      </section>
+      <section id="personal-screen" class="screen" hidden><div id="cdo-notice" class="status" role="status" aria-live="polite" hidden></div>
+        <article id="cdo-login-card" class="card login-card"><span class="feature-icon"><svg><use href="#i-personal"/></svg></span><p class="lime">С учётом твоих подгрупп</p><h2>Твои личные пары.</h2><p class="muted">Войди с логином и паролем ЦДО факультета, чтобы открыть личное расписание.</p>
+          <form id="cdo-form"><label for="cdo-username">Логин ЦДО</label><input id="cdo-username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="150" placeholder="Твой логин" required><label for="cdo-password">Пароль</label><div class="password-field"><input id="cdo-password" name="password" type="password" autocomplete="current-password" maxlength="1024" placeholder="Пароль ЦДО" required><button id="password-toggle" type="button" aria-label="Показать пароль" aria-pressed="false">Показать</button></div><button id="cdo-login" class="wide primary" type="submit">Войти через ЦДО <span>↗</span></button></form><p class="privacy-note">Пароль используется только для входа и не сохраняется в приложении.</p>
+        </article>
+        <article id="personal-day-card" class="card day" hidden><div class="day-head"><span id="personal-weekday" class="lime"></span><span id="personal-group" class="pill"></span></div><h2 class="date"><span id="personal-date-label"></span> <small id="personal-year"></small></h2><div class="day-meta"><span id="personal-pair-count"></span><span id="personal-day-range" class="muted"></span></div><div id="personal-track" class="track" aria-hidden="true"></div><div id="personal-lessons" class="lessons"></div><div class="day-nav"><button id="personal-previous" aria-label="Предыдущий день личного расписания">←</button><button id="personal-today">Сегодня</button><button id="personal-next" aria-label="Следующий день личного расписания">Завтра →</button></div><div class="source"><span>Личное расписание · ЦДО</span><button id="personal-refresh" class="text-button">Обновить ↻</button></div></article><button id="personal-retry" class="retry" hidden>Попробовать ещё раз ↻</button>
+      </section>
+      <section id="profile-screen" class="screen" hidden><article class="card profile-card"><div class="avatar"><svg><use href="#i-user"/></svg></div><p class="lime">Твой учебный профиль</p><h2 id="profile-name">Привет!</h2><p class="muted">Всё важное о твоём расписании.</p><button id="profile-group" class="profile-row"><span><small>МОЯ ГРУППА</small><strong id="profile-group-name">Выбрать группу</strong></span><span>↗</span></button><div class="profile-row"><span><small>АККАУНТ ЦДО</small><strong id="profile-cdo">Проверяем подключение…</strong></span><span id="connection-dot" class="connection-dot"></span></div><button id="profile-connect" class="wide primary">Подключить ЦДО <span>↗</span></button><button id="cdo-logout" class="wide secondary" hidden>Выйти из ЦДО <span>↗</span></button><div id="profile-notice" class="status" role="status" hidden></div></article><p class="profile-footnote">Данные расписания — ФГУ МГУ.<br>ЦДО может попросить повторный вход после завершения сессии.</p></section>
+    </main>
+    <nav class="bottom-nav" aria-label="Разделы"><button id="nav-day" class="active" aria-current="page"><svg><use href="#i-calendar"/></svg><span>Расписание</span></button><button id="nav-personal"><svg><use href="#i-personal"/></svg><span>Личное</span></button><button id="nav-profile"><svg><use href="#i-user"/></svg><span>Профиль</span></button></nav>
+  </div>
 </body>
 </html>

@@ -1,108 +1,188 @@
 'use strict';
-const tg = window.Telegram?.WebApp;
 const $ = id => document.getElementById(id);
 const palette = ['#b5f56b', '#77b9ff', '#be9bff', '#ffce69'];
-let selected = {faculty:'', course:'', group:''}, groupOptions = [], current = null, busy = false, retryAction = null;
 const storageKey = 'fgu-selection-v1';
-const initData = tg?.initData || '';
+const pending = new Set();
+let tg = null, initData = '', selected = {faculty:'', course:'', group:''};
+let groupOptions = [], current = null, personal = null, cdoProfile = null, activeTab = 'day', appliedSelection = null;
+let retryAction = null, personalRetry = null, catalogLoaded = false;
+let authGeneration = 0, authMutationPending = false;
 
-function insets() {
-  const safe=tg?.safeAreaInset||{}, content=tg?.contentSafeAreaInset||{};
-  for(const edge of ['top','bottom','left','right']) {
-    document.documentElement.style.setProperty('--safe-'+edge, ((safe[edge]||0)+(content[edge]||0))+'px');
-  }
+function node(tag, text, cls) {
+  const element=document.createElement(tag);
+  if(text!==undefined&&text!==null)element.textContent=text;
+  if(cls)element.className=cls;
+  return element;
 }
-function fullscreen() {
-  if(!tg) return;
-  tg.expand();
-  if(tg.isVersionAtLeast?.('8.0') && !tg.isFullscreen) tg.requestFullscreen();
+function add(parent,tag,text,cls){const element=node(tag,text,cls);parent.append(element);return element;}
+function notice(id,text,error=false){$(id).hidden=!text;$(id).textContent=text;$(id).classList.toggle('error',error);}
+function haptic(){try{tg?.HapticFeedback?.selectionChanged();}catch{}}
+function introTarget(){const rect=$('brand-mark').getBoundingClientRect();document.documentElement.style.setProperty('--intro-x',(rect.left+rect.width/2-innerWidth/2)+'px');document.documentElement.style.setProperty('--intro-y',(rect.top+rect.height/2-innerHeight/2)+'px');}
+function insets(){
+  const safe=tg?.safeAreaInset||{},content=tg?.contentSafeAreaInset||{};
+  for(const edge of ['top','bottom','left','right'])document.documentElement.style.setProperty('--safe-'+edge,((safe[edge]||0)+(content[edge]||0))+'px');
+  introTarget();
 }
-function setupTelegram() {
-  if(!tg) { $('fullscreen').hidden=true; return; }
-  tg.ready(); tg.setHeaderColor('#eeeef2'); tg.setBackgroundColor('#eeeef2');
-  if(tg.isVersionAtLeast?.('7.10')) tg.setBottomBarColor('#eeeef2');
-  for(const event of ['safeAreaChanged','contentSafeAreaChanged','fullscreenChanged','viewportChanged']) tg.onEvent(event,insets);
-  tg.onEvent('fullscreenFailed', event=>{if(event.error==='UNSUPPORTED') $('fullscreen').hidden=true;});
-  if(!tg.isVersionAtLeast?.('8.0')) $('fullscreen').hidden=true;
-  insets(); fullscreen();
+function startIntro(){
+  const finish=()=>{$('splash').hidden=true;document.body.classList.remove('intro-running');document.body.classList.add('ui-ready');try{tg?.setHeaderColor?.('#eeeef2');}catch{}};
+  introTarget();
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches){setTimeout(finish,80);return;}
+  setTimeout(()=>{document.body.classList.add('ui-ready');$('splash').classList.add('leaving');},850);
+  setTimeout(finish,1350);
 }
-function node(tag, text, cls) {const n=document.createElement(tag); if(text!==undefined&&text!==null)n.textContent=text; if(cls)n.className=cls; return n;}
-function add(parent, tag, text, cls) {const n=node(tag,text,cls);parent.append(n);return n;}
-function notice(text, error=false) { $('status').hidden=!text; $('status').textContent=text; $('status').classList.toggle('error',error); }
-function haptic(){tg?.HapticFeedback?.selectionChanged();}
-async function api(path, query={}) {
-  const response=await fetch('/api/'+path+'?'+new URLSearchParams(query),{headers:{'X-Telegram-Init-Data':initData},cache:'no-store'});
-  let data; try {data=await response.json();}catch{throw new Error('Сервер не отвечает. Попробуй ещё раз.');}
-  if(!response.ok) throw new Error(data.error||'Не удалось загрузить данные.');
-  return data;
+function fullscreen(){if(!tg)return;try{tg.expand();if(tg.isVersionAtLeast?.('8.0')&&!tg.isFullscreen)tg.requestFullscreen();}catch{$('fullscreen').hidden=true;}}
+function setupTelegram(){
+  if(!tg){$('fullscreen').hidden=true;return;}
+  try{
+    tg.ready();tg.setHeaderColor?.($('splash').hidden?'#eeeef2':'#000000');tg.setBackgroundColor?.('#eeeef2');
+    if(tg.isVersionAtLeast?.('7.10'))tg.setBottomBarColor?.('#eeeef2');
+    for(const event of ['safeAreaChanged','contentSafeAreaChanged','fullscreenChanged','viewportChanged'])tg.onEvent?.(event,insets);
+    tg.onEvent?.('fullscreenFailed',()=>{$('fullscreen').hidden=true;});
+    if(!tg.isVersionAtLeast?.('8.0'))$('fullscreen').hidden=true;
+    tg.BackButton?.onClick(()=>openView('day'));
+  }catch{}
+  insets();fullscreen();
 }
-async function task(action) {
-  if(busy)return;
-  busy=true;document.body.classList.add('loading');notice('Обновляем расписание…');$('retry').hidden=true;
-  for(const el of [$('faculty'),$('course'),$('group-search'),$('show')])el.disabled=true;
-  try{await action();notice('');retryAction=null;}
-  catch(error){notice(error.message||'Не удалось загрузить расписание.',true);retryAction=action;$('retry').hidden=false;}
-  finally{busy=false;document.body.classList.remove('loading');$('faculty').disabled=!$('faculty').options.length;$('course').disabled=!selected.faculty;$('group-search').disabled=!selected.course;$('show').disabled=!selected.group;}
+async function telegramReady(){
+  for(let i=0;i<120;i++){if(window.Telegram?.WebApp)return window.Telegram.WebApp;await new Promise(resolve=>setTimeout(resolve,25));}
+  return null;
 }
-function fillSelect(id, options, placeholder) {
-  const select=$(id);select.replaceChildren(new Option(placeholder,''));options.forEach(o=>select.add(new Option(o.name,o.id)));
-  select.disabled=!options.length;
+async function api(path,query={},options={}){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);
+  try{
+    const response=await fetch('/api/'+path+'?'+new URLSearchParams(query),{...options,signal:controller.signal,headers:{'X-Telegram-Init-Data':initData,...(options.body?{'Content-Type':'application/json'}:{}),...options.headers},cache:'no-store',credentials:'same-origin'});
+    let data;try{data=await response.json();}catch{throw new Error('Сервер не отвечает. Попробуй ещё раз.');}
+    if(!response.ok){const error=new Error(data.error||'Не удалось загрузить данные.');error.status=response.status;throw error;}
+    return data;
+  }catch(error){if(error.name==='AbortError')throw new Error('Загрузка заняла слишком много времени. Попробуй ещё раз.');throw error;}
+  finally{clearTimeout(timer);}
 }
-function renderGroups() {
-  const q=$('group-search').value.trim().toLocaleLowerCase('ru');$('groups').replaceChildren();
-  const visible=groupOptions.filter(o=>o.name.toLocaleLowerCase('ru').includes(q));
+function syncControls(){
+  const groupBusy=pending.has('group');
+  $('faculty').disabled=groupBusy||!catalogLoaded;
+  $('course').disabled=groupBusy||!selected.faculty;
+  $('group-search').disabled=groupBusy||!selected.course;
+  $('show').disabled=groupBusy||!selected.group;
+  for(const id of ['previous','next','today','refresh'])$(id).disabled=groupBusy||!current;
+  for(const id of ['cdo-login','cdo-username','cdo-password'])$(id).disabled=pending.has('personal')||authMutationPending||!initData;
+  $('cdo-login').firstChild.textContent=pending.has('personal')?'Подключаем… ':'Войти через ЦДО ';
+  for(const id of ['personal-previous','personal-next','personal-today','personal-refresh'])$(id).disabled=pending.has('personal')||!personal;
+  $('cdo-logout').disabled=pending.has('personal')||pending.has('profile');
+}
+async function task(action,scope='group'){
+  if(pending.has(scope))return;
+  pending.add(scope);syncControls();
+  const id={group:'status',personal:'cdo-notice',profile:'profile-notice'}[scope];
+  notice(id,scope==='group'?'Загружаем расписание…':'Загружаем…');
+  if(scope==='group')$('retry').hidden=true;
+  if(scope==='personal')$('personal-retry').hidden=true;
+  try{await action();notice(id,'');if(scope==='group')retryAction=null;if(scope==='personal')personalRetry=null;}
+  catch(error){
+    if(scope==='personal'&&error.status===401)setCdoProfile({connected:false});
+    notice(id,error.message||'Не удалось загрузить данные.',true);
+    if(scope==='group'){retryAction=action;$('retry').hidden=false;}
+    if(scope==='personal'&&error.status!==401){personalRetry=action;$('personal-retry').hidden=false;}
+  }finally{pending.delete(scope);syncControls();}
+}
+function openView(view){
+  activeTab=view==='selection'?'day':view;
+  for(const name of ['day','selection','personal','profile'])$(name+'-screen').hidden=name!==view;
+  for(const name of ['day','personal','profile']){const button=$('nav-'+name);button.classList.toggle('active',name===activeTab);if(name===activeTab)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');}
+  const title={day:'Расписание',selection:'Моя группа',personal:'Личное',profile:'Профиль'}[view];
+  $('page-title').replaceChildren(document.createTextNode(title),node('span','.','heading-dot'));
+  $('page-eyebrow').textContent={day:'ТВОЙ УЧЕБНЫЙ ДЕНЬ',selection:'РАСПИСАНИЕ ПОД ТЕБЯ',personal:'ТВОИ ПАРЫ И ПОДГРУППЫ',profile:'ВСЁ НА СВОЁМ МЕСТЕ'}[view];
+  try{if(view==='selection')tg?.BackButton?.show();else tg?.BackButton?.hide();}catch{}
+  window.scrollTo({top:0,behavior:'instant'});haptic();
+  if(view==='personal'&&initData&&!pending.has('personal'))task(ensurePersonal,'personal');
+  if(view==='profile'&&initData&&!pending.has('personal'))task(checkCdo,'profile');
+}
+function fillSelect(id,options,placeholder){const select=$(id);select.replaceChildren(new Option(placeholder,''));options.forEach(option=>select.add(new Option(option.name,option.id)));}
+function renderGroups(){
+  const query=$('group-search').value.trim().toLocaleLowerCase('ru');$('groups').replaceChildren();
+  const visible=groupOptions.filter(option=>option.name.toLocaleLowerCase('ru').includes(query));
   if(!visible.length)add($('groups'),'p',groupOptions.length?'Такой группы не нашли.':'Нет доступных групп.','muted');
-  for(const option of visible){const b=add($('groups'),'button',option.name,selected.group===option.id?'selected':'');b.setAttribute('aria-pressed',String(selected.group===option.id));b.onclick=()=>{if(busy)return;selected.group=option.id;haptic();renderGroups();$('show').disabled=false;};}
+  for(const option of visible){const button=add($('groups'),'button',option.name,selected.group===option.id?'selected':'');button.setAttribute('aria-pressed',String(selected.group===option.id));button.onclick=()=>{if(pending.has('group'))return;selected.group=option.id;renderGroups();syncControls();haptic();};}
 }
-function remember(){try{localStorage.setItem(storageKey,JSON.stringify(selected));}catch{}}
-function scrollToSection(id){$(id).scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});$('nav-day').classList.toggle('active',id==='day-section');$('nav-group').classList.toggle('active',id==='selection-section');}
-function shift(day, delta){const d=new Date(day+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+delta);return d.toISOString().slice(0,10);}
-async function loadDay(day, refresh=false) {
-  const query={...selected};if(day)query.date=day;if(refresh)query.refresh='1';
-  const data=await api('schedule',query);current=data;remember();renderDay();$('refresh').disabled=false;
+function remember(){try{localStorage.setItem(storageKey,JSON.stringify(appliedSelection));}catch{}}
+function shift(day,delta){const d=new Date(day+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+delta);return d.toISOString().slice(0,10);}
+async function loadDay(day,refresh=false,choice=appliedSelection||selected){const query={...choice};if(day)query.date=day;if(refresh)query.refresh='1';const data=await api('schedule',query);current=data;appliedSelection={...choice};remember();renderSchedule(data);renderNearest();$('group-day-card').hidden=false;$('profile-group-name').textContent=data.group.name;}
+function renderNearest(){
+  const data=current,now=new Date(data.now),clock=now.toLocaleTimeString('en-GB',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
+  const nearest=data.lessons.find(lesson=>data.date>data.today||(data.date===data.today&&lesson.end_time>clock));
+  const card=$('nearest');card.replaceChildren();const top=add(card,'div',null,'near-top');
+  add(top,'span',nearest&&data.date===data.today&&nearest.start_time<=clock?'Сейчас на паре':'Ближайшая пара','lime');add(top,'span',data.group.name,'pill');
+  if(nearest){const time=add(card,'div',nearest.start_time,'near-clock');add(time,'small',' — '+nearest.end_time);add(card,'h2',nearest.subject,'near-subject');if(nearest.teacher)add(card,'p',nearest.teacher,'muted');}
+  else{add(card,'h2',data.lessons.length?'На этот день всё.':'День без пар.');add(card,'p','Можно выдохнуть. Следующий день — по стрелке ниже.','muted');}
+  const footer=add(card,'div',null,'near-footer');add(footer,'span',data.label+' · '+data.weekday);add(footer,'span',nearest?.classroom||'ФГУ','pill');
 }
-function renderNearest() {
-  const d=current, now=new Date(d.now), clock=now.toLocaleTimeString('en-GB',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
-  const nearest=d.lessons.find(l=>d.date>d.today||(d.date===d.today&&l.end_time>clock));const card=$('nearest');card.replaceChildren();
-  const top=add(card,'div',null,'near-top');add(top,'span',nearest&&d.date===d.today&&nearest.start_time<=clock?'Сейчас на паре':'Ближайшая пара','lime');add(top,'span',d.group.name,'pill');
-  if(!nearest){add(card,'h2',d.lessons.length?'На сегодня всё.':'День без пар.');add(card,'p','Можно выдохнуть. Следующий день — по кнопке справа.','muted');}
-  else{const time=add(card,'div',nearest.start_time,'near-clock');add(time,'small',' — '+nearest.end_time);add(card,'h2',nearest.subject,'near-subject');if(nearest.teacher)add(card,'p',nearest.teacher,'muted');}
-  const foot=add(card,'div',null,'near-footer');add(foot,'span',d.label+' · '+d.weekday);add(foot,'span',nearest?.classroom||'ФГУ','pill');
+function renderSchedule(data,prefix=''){
+  const element=id=>$(prefix+id);
+  element('weekday').textContent=data.weekday;element('date-label').textContent=data.label;element('year').textContent=data.date.slice(0,4);
+  if(prefix)$('personal-group').textContent=data.group.name;else $('change-group').textContent=data.group.name+' ↗';
+  const slots=new Map();for(const lesson of data.lessons){const key=lesson.pair_number??lesson.start_time;if(!slots.has(key))slots.set(key,[]);slots.get(key).push(lesson);}
+  const count=slots.size;element('pair-count').textContent=count+' '+(count===1?'пара':count>1&&count<5?'пары':'пар');
+  element('day-range').textContent=count?data.lessons.reduce((a,l)=>l.start_time<a?l.start_time:a,'99:99')+' — '+data.lessons.reduce((a,l)=>l.end_time>a?l.end_time:a,'00:00'):'';
+  element('track').replaceChildren();element('lessons').replaceChildren();
+  for(const items of slots.values()){
+    const first=items[0],color=palette[((first.pair_number||1)-1)%palette.length];const bar=add(element('track'),'span');bar.style.setProperty('--color',color);
+    const row=add(element('lessons'),'article',null,'lesson');row.style.setProperty('--color',color);
+    const times=add(row,'div',null,'lesson-times');add(times,'strong',first.start_time);add(times,'span',first.end_time);add(times,'small',first.pair_number?first.pair_number+' пара':'');
+    const details=add(row,'div',null,'lesson-details');
+    for(const lesson of items){const part=add(details,'div',null,'lesson-part');const heading=add(part,'div',null,'subject-line');add(heading,'h3',lesson.subject);if(lesson.lesson_type)add(heading,'span',lesson.lesson_type,'type');if(lesson.teacher)add(part,'p',lesson.teacher,'teacher');if(lesson.classroom)add(part,'p','Аудитория '+lesson.classroom,'room');if(lesson.groups&&lesson.groups!==data.group.name)add(part,'p','Группы: '+lesson.groups,'subgroup');if(lesson.start_time!==first.start_time||lesson.end_time!==first.end_time)add(part,'p',lesson.start_time+' — '+lesson.end_time,'subgroup');}
+  }
+  if(!count){const empty=add(element('lessons'),'div',null,'empty');add(empty,'span','↗','empty-symbol');add(empty,'h3','Можно выдохнуть.');add(empty,'p','В этот день занятий нет.','muted');}
+  element('previous').textContent='← '+(shift(data.date,-1)===data.today?'Сегодня':'Назад');element('next').textContent=(shift(data.date,1)===shift(data.today,1)?'Завтра':'Дальше')+' →';
 }
-function renderDay() {
-  const d=current;$('weekday').textContent=d.weekday;$('date-label').textContent=d.label;$('year').textContent=d.date.slice(0,4);$('change-group').textContent=d.group.name+' ↗';
-  const slots=new Map();for(const l of d.lessons){const key=l.pair_number??l.start_time;if(!slots.has(key))slots.set(key,[]);slots.get(key).push(l);}
-  const count=slots.size;$('pair-count').textContent=count+' '+(count===1?'пара':count>1&&count<5?'пары':'пар');
-  $('day-range').textContent=count?d.lessons.reduce((a,l)=>l.start_time<a?l.start_time:a,'99:99')+' — '+d.lessons.reduce((a,l)=>l.end_time>a?l.end_time:a,'00:00'):'';
-  $('track').replaceChildren();$('lessons').replaceChildren();
-  for(const [key,items] of slots){const first=items[0],color=palette[((first.pair_number||1)-1)%palette.length];const bar=add($('track'),'span');bar.style.setProperty('--color',color);const row=add($('lessons'),'article',null,'lesson');row.style.setProperty('--color',color);const times=add(row,'div',null,'lesson-times');add(times,'strong',first.start_time);add(times,'span',first.end_time);add(times,'small',first.pair_number?first.pair_number+' пара':'');const details=add(row,'div',null,'lesson-details');for(const l of items){const part=add(details,'div',null,'lesson-part');const heading=add(part,'div',null,'subject-line');add(heading,'h3',l.subject);if(l.lesson_type)add(heading,'span',l.lesson_type,'type');if(l.teacher)add(part,'p',l.teacher,'teacher');if(l.classroom)add(part,'p','Аудитория '+l.classroom,'room');if(l.groups&&l.groups!==d.group.name)add(part,'p','Группы: '+l.groups,'subgroup');if(l.start_time!==first.start_time||l.end_time!==first.end_time)add(part,'p',l.start_time+' — '+l.end_time,'subgroup');}}
-  if(!count){const e=add($('lessons'),'div',null,'empty');add(e,'span','↗','empty-symbol');add(e,'h3','Можно выдохнуть.');add(e,'p','В этот день занятий нет.','muted');}
-  $('day-nav').hidden=false;$('previous').textContent='← '+(shift(d.date,-1)===d.today?'Сегодня':'Назад');$('next').textContent=(shift(d.date,1)===shift(d.today,1)?'Завтра':'Дальше')+' →';renderNearest();
+function setCdoProfile(profile){
+  cdoProfile=profile;const connected=Boolean(profile?.connected);
+  $('cdo-login-card').hidden=connected;$('personal-day-card').hidden=!connected||!personal;
+  $('profile-cdo').textContent=connected?profile.name:'Не подключён';$('connection-dot').classList.toggle('connected',connected);
+  $('profile-connect').hidden=connected;$('cdo-logout').hidden=!connected;
+  if(!connected){personal=null;$('personal-lessons').replaceChildren();$('personal-date-label').textContent='';}
 }
-$('faculty').onchange=()=>task(async()=>{selected={faculty:$('faculty').value,course:'',group:''};fillSelect('course',[],'Выбери');groupOptions=[];$('groups').replaceChildren();$('group-search').value='';if(selected.faculty){const d=await api('options',{faculty:selected.faculty});fillSelect('course',d.options,'Выбери курс');}});
-$('course').onchange=()=>task(async()=>{selected.course=$('course').value;selected.group='';groupOptions=[];$('group-search').value='';if(selected.course){const d=await api('options',{faculty:selected.faculty,course:selected.course});groupOptions=d.options;}renderGroups();});
+async function checkCdo(){const generation=authGeneration,profile=await api('cdo/session');if(generation===authGeneration)setCdoProfile(profile);}
+async function loadPersonal(day){const generation=authGeneration,query={};if(day)query.date=day;const data=await api('cdo/schedule',query);if(generation!==authGeneration)return;personal=data;renderSchedule(personal,'personal-');$('personal-day-card').hidden=false;}
+async function ensurePersonal(){await checkCdo();if(cdoProfile.connected&&!personal)await loadPersonal();}
+
+$('choose-group').onclick=()=>openView('selection');$('change-group').onclick=()=>openView('selection');$('profile-group').onclick=()=>openView('selection');$('selection-back').onclick=()=>openView('day');
+$('faculty').onchange=()=>task(async()=>{selected={faculty:$('faculty').value,course:'',group:''};fillSelect('course',[],'Выбери');groupOptions=[];$('groups').replaceChildren();$('group-search').value='';if(selected.faculty)fillSelect('course',(await api('options',{faculty:selected.faculty})).options,'Выбери курс');});
+$('course').onchange=()=>task(async()=>{selected.course=$('course').value;selected.group='';groupOptions=[];$('group-search').value='';if(selected.course)groupOptions=(await api('options',{faculty:selected.faculty,course:selected.course})).options;renderGroups();});
 $('group-search').oninput=renderGroups;
-$('show').onclick=()=>task(async()=>{await loadDay();scrollToSection('day-section');haptic();});
-$('previous').onclick=()=>task(()=>loadDay(shift(current.date,-1)));
-$('next').onclick=()=>task(()=>loadDay(shift(current.date,1)));
-$('today').onclick=()=>task(()=>loadDay(current.today));
-$('refresh').onclick=()=>task(()=>loadDay(current.date,true));
-$('change-group').onclick=() => scrollToSection('selection-section');
-$('nav-day').onclick=()=>scrollToSection(current?'day-section':'selection-section');
-$('nav-group').onclick=()=>scrollToSection('selection-section');
-$('fullscreen').onclick=fullscreen;
-$('retry').onclick=()=>{if(retryAction)task(retryAction);};
-setupTelegram();
-if(!initData){notice('Открой приложение кнопкой «Расписание» в Telegram — так мы сможем загрузить твои пары.',true);}
-else task(async()=>{
-  const faculties=await api('options');fillSelect('faculty',faculties.options,'Выбери направление');
-  let saved;try{saved=JSON.parse(localStorage.getItem(storageKey)||'null');}catch{}
-  if(!saved||!faculties.options.some(x=>x.id===saved.faculty))return;
-  selected.faculty=saved.faculty;$('faculty').value=saved.faculty;
-  const courses=await api('options',{faculty:selected.faculty});fillSelect('course',courses.options,'Выбери курс');
-  if(!courses.options.some(x=>x.id===saved.course))return;
-  selected.course=saved.course;$('course').value=saved.course;
-  groupOptions=(await api('options',{faculty:selected.faculty,course:selected.course})).options;
-  if(groupOptions.some(x=>x.id===saved.group))selected.group=saved.group;
-  renderGroups();if(selected.group)await loadDay();
-});
+$('show').onclick=()=>task(async()=>{await loadDay(undefined,false,{...selected});openView('day');});
+$('previous').onclick=()=>task(()=>loadDay(shift(current.date,-1)));$('next').onclick=()=>task(()=>loadDay(shift(current.date,1)));$('today').onclick=()=>task(()=>loadDay(current.today));$('refresh').onclick=()=>task(()=>loadDay(current.date,true));
+for(const name of ['day','personal','profile'])$('nav-'+name).onclick=()=>openView(name);
+$('home').onclick=event=>{event.preventDefault();openView('day');};$('fullscreen').onclick=fullscreen;
+$('retry').onclick=()=>{if(retryAction)task(retryAction);};$('personal-retry').onclick=()=>{if(personalRetry)task(personalRetry,'personal');};
+$('profile-connect').onclick=()=>openView('personal');
+$('password-toggle').onclick=()=>{const visible=$('cdo-password').type==='password';$('cdo-password').type=visible?'text':'password';$('password-toggle').textContent=visible?'Скрыть':'Показать';$('password-toggle').setAttribute('aria-pressed',String(visible));$('password-toggle').setAttribute('aria-label',visible?'Скрыть пароль':'Показать пароль');};
+$('cdo-form').onsubmit=event=>{
+  event.preventDefault();if(pending.has('personal')||authMutationPending)return;
+  const generation=++authGeneration;
+  let body=JSON.stringify({username:$('cdo-username').value,password:$('cdo-password').value});$('cdo-password').value='';$('cdo-password').type='password';$('password-toggle').textContent='Показать';$('password-toggle').setAttribute('aria-pressed','false');
+  // Login is intentionally not a retry closure: never retain a password after the request.
+  pending.add('personal');syncControls();notice('cdo-notice','Подключаем ЦДО…');$('personal-retry').hidden=true;
+  (async()=>{try{const profile=await api('cdo/session',{}, {method:'POST',body});body=null;if(generation!==authGeneration)return;personal=null;setCdoProfile(profile);await loadPersonal();notice('cdo-notice','');haptic();}
+    catch(error){if(generation!==authGeneration)return;if(error.status===401)setCdoProfile({connected:false});else if(cdoProfile?.connected){personalRetry=()=>loadPersonal();$('personal-retry').hidden=false;}notice('cdo-notice',error.message||'Не удалось войти.',true);}
+    finally{body=null;pending.delete('personal');syncControls();}})();
+};
+$('cdo-logout').onclick=()=>task(async()=>{const generation=++authGeneration;authMutationPending=true;syncControls();try{await api('cdo/session',{}, {method:'DELETE'});if(generation!==authGeneration)return;setCdoProfile({connected:false});notice('cdo-notice','');personalRetry=null;$('personal-retry').hidden=true;}finally{authMutationPending=false;}},'profile');
+$('personal-previous').onclick=()=>task(()=>loadPersonal(shift(personal.date,-1)),'personal');$('personal-next').onclick=()=>task(()=>loadPersonal(shift(personal.date,1)),'personal');$('personal-today').onclick=()=>task(()=>loadPersonal(personal.today),'personal');$('personal-refresh').onclick=()=>task(()=>loadPersonal(personal.date),'personal');
+
+startIntro();syncControls();
+(async()=>{
+  tg=await telegramReady();initData=tg?.initData||'';setupTelegram();syncControls();
+  if(!initData){notice('status','Открой приложение кнопкой «Расписание» в Telegram — так мы сможем загрузить твои пары.',true);setCdoProfile({connected:false});return;}
+  const firstName=tg?.initDataUnsafe?.user?.first_name;if(firstName)$('profile-name').textContent=firstName;
+  task(async()=>{
+    const faculties=await api('options');fillSelect('faculty',faculties.options,'Выбери направление');catalogLoaded=true;
+    let saved;try{saved=JSON.parse(localStorage.getItem(storageKey)||'null');}catch{}
+    if(!saved||!faculties.options.some(option=>option.id===saved.faculty))return;
+    selected.faculty=saved.faculty;$('faculty').value=saved.faculty;
+    const courses=(await api('options',{faculty:selected.faculty})).options;fillSelect('course',courses,'Выбери курс');
+    if(!courses.some(option=>option.id===saved.course))return;
+    selected.course=saved.course;$('course').value=saved.course;groupOptions=(await api('options',{faculty:selected.faculty,course:selected.course})).options;
+    if(groupOptions.some(option=>option.id===saved.group))selected.group=saved.group;
+    renderGroups();if(selected.group)await loadDay();
+  });
+  task(checkCdo,'profile');
+})();
