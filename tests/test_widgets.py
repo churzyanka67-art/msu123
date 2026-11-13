@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock
 from zoneinfo import ZoneInfo
 
 from aiogram import Bot, Dispatcher
-from aiogram.exceptions import TelegramNetworkError
-from aiogram.types import Update
-from app.widgets.api import AnswerWidgetQuery, EditMessageWidgetData
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
+from aiogram.types import Chat, Message, Update, User
+from app.widgets.api import AnswerWidgetQuery, EditMessageWidgetData, SendWidget
 from app.widgets.presentation import state_fields, widget_html
 
 from app.controller import Controller, Selection
@@ -144,6 +144,31 @@ class WidgetTests(unittest.IsolatedAsyncioTestCase):
 
     def test_html_is_under_telegram_limits(self):
         self.assertIn("TelegramWidget", widget_html())
+
+    async def test_start_logs_server_rejection_without_token_or_request_body(self):
+        controller = self.setup_controller()
+        flow = FlowHandlers(controller, MemoryStore(), widgets=True)
+        token = "123456789:FAKE_SECRET_FOR_REDACTION_TEST"
+        method = SendWidget(chat_id=7, html="PRIVATE_HTML", chat_data="PRIVATE_STATE", public_data="")
+        bot = AsyncMock()
+        bot.side_effect = TelegramBadRequest(
+            method=method,
+            message=f"Bad Request: TEST_WIDGET_REJECTED https://api.telegram.org/bot{token}/sendWidget",
+        )
+        message = Message(
+            message_id=1,
+            date=NOW,
+            chat=Chat(id=7, type="private"),
+            from_user=User(id=7, is_bot=False, first_name="А"),
+        )
+        with self.assertLogs("app.handlers.flow", level="WARNING") as logs:
+            await flow.start(message, bot)
+        result = " ".join(logs.output)
+        self.assertIn("sendWidget", result)
+        self.assertIn("TEST_WIDGET_REJECTED", result)
+        self.assertNotIn(token, result)
+        self.assertNotIn("PRIVATE_HTML", result)
+        self.assertNotIn("PRIVATE_STATE", result)
 
 
 if __name__ == "__main__":

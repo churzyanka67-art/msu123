@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 from weakref import WeakValueDictionary
 
 from aiogram import Bot, Router
@@ -15,6 +16,13 @@ from app.widgets.api import AnswerWidgetQuery, EditMessageWidgetData, SendWidget
 from app.widgets.presentation import state_fields, widget_html
 
 log = logging.getLogger(__name__)
+
+
+def api_error_details(exc):
+    """Log the API's description, never the method payload or a token in a URL."""
+    description = re.sub(r"\d{5,}:[A-Za-z0-9_-]+", "[REDACTED]", exc.message)
+    description = description.replace("\r", " ").replace("\n", " ")
+    return f"{exc.method.__api_method__} / {type(exc).__name__}: {description[:1000]}"
 
 
 class FlowHandlers:
@@ -49,7 +57,7 @@ class FlowHandlers:
                         return
                     sent = await bot.send_message(message.chat.id, screen.text, reply_markup=screen.keyboard)
             except TelegramAPIError as exc:
-                log.warning("Telegram start failed: %s", type(exc).__name__)
+                log.warning("Telegram start failed: %s", api_error_details(exc))
                 return
             screen.message_id = sent.message_id
             await self.store.set(key, screen)
@@ -100,7 +108,7 @@ class FlowHandlers:
             except StaleCallback:
                 return
             except TelegramAPIError as exc:
-                log.warning("Telegram widget update failed: %s", type(exc).__name__)
+                log.warning("Telegram widget update failed: %s", api_error_details(exc))
                 return
             next_screen.message_id = screen.message_id
             await self.store.set(key, next_screen)
@@ -138,7 +146,7 @@ class FlowHandlers:
                 return
             except TelegramAPIError as exc:
                 # Preserve the previous actions when the edit fails; another click can retry.
-                log.warning("Telegram edit failed: %s", type(exc).__name__)
+                log.warning("Telegram edit failed: %s", api_error_details(exc))
                 return
             next_screen.message_id = screen.message_id
             await self.store.set(key, next_screen)
